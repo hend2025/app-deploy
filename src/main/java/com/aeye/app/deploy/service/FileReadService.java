@@ -266,6 +266,20 @@ public class FileReadService {
                 return result;
             }
             
+            // 检查文件大小，如果文件过大给出警告
+            long fileSize = file.length();
+            long fileSizeMB = fileSize / (1024 * 1024);
+            if (fileSizeMB > 50) {
+                result.put("warning", String.format("文件较大 (%d MB)，建议下载后查看", fileSizeMB));
+            }
+            
+            // 限制最大读取行数，防止内存溢出
+            int maxAllowedLines = 5000;
+            if (lastLines > maxAllowedLines) {
+                lastLines = maxAllowedLines;
+                result.put("warning", String.format("请求行数过多，已限制为 %d 行", maxAllowedLines));
+            }
+            
             // 读取文件内容
             String content = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
             String[] lines = content.split("\n");
@@ -361,10 +375,21 @@ public class FileReadService {
                 return result;
             }
             
+            // 限制单次增量读取的最大行数，防止内存溢出
+            int maxIncrementalLines = 2000;
+            int newLinesCount = totalLines - fromLine;
+            
+            // 如果新增行数超过限制，只读取最后的maxIncrementalLines行
+            int actualFromLine = fromLine;
+            if (newLinesCount > maxIncrementalLines) {
+                actualFromLine = totalLines - maxIncrementalLines;
+                newLinesCount = maxIncrementalLines;
+                result.put("warning", String.format("新增行数过多，只读取最后 %d 行", maxIncrementalLines));
+            }
+            
             // 构建新增内容
             StringBuilder newContent = new StringBuilder();
-            int newLinesCount = totalLines - fromLine;
-            for (int i = fromLine; i < totalLines; i++) {
+            for (int i = actualFromLine; i < totalLines; i++) {
                 newContent.append(lines[i]);
                 if (i < totalLines - 1) {
                     newContent.append("\n");

@@ -23,5 +23,9 @@ app:
       enabled: true
       retention-days: 10
       schedule: "0 0 2 * * ?"
+    rotation:
+      enabled: true
+      max-size-mb: 10
+      check-interval-seconds: 180
 
 

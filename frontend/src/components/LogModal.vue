@@ -39,6 +39,7 @@
 import { ref, onUnmounted, nextTick } from 'vue'
 import { Modal } from 'bootstrap'
 import { logFileApi } from '../api'
+import { showAlert } from '../utils/alert'
 
 export default {
   name: 'LogModal',
@@ -92,6 +93,12 @@ export default {
           const response = await logFileApi.readFileLastLines(currentLogFile.value, 2000)
           logContentText.value = response.content
           logLineCount.value = response.totalLines
+          
+          // 显示警告信息
+          if (response.warning) {
+            showAlert(response.warning, 'warning')
+          }
+          
           // 等待DOM更新后滚动到底部
           await nextTick()
           scrollToBottom()
@@ -103,6 +110,12 @@ export default {
             // 限制只保留最新的2000行
             logContentText.value = limitLogLines(logContentText.value, 2000)
             logLineCount.value = response.totalLines
+            
+            // 显示警告信息（只在首次显示，避免频繁弹窗）
+            if (response.warning && !logContentText.value.includes('warning-shown')) {
+              showAlert(response.warning, 'warning')
+            }
+            
             // 等待DOM更新后滚动到底部
             await nextTick()
             scrollToBottom()

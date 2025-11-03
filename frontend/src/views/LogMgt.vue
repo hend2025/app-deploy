@@ -148,6 +148,12 @@ export default {
           )
           logContentText.value = response.content
           logLineCount.value = response.totalLines
+          
+          // 显示警告信息
+          if (response.warning) {
+            showAlert(response.warning, 'warning')
+          }
+          
           // 等待DOM更新后滚动到底部
           await nextTick()
           scrollToBottom()
@@ -162,6 +168,12 @@ export default {
             // 限制只保留最新的指定行数
             logContentText.value = limitLogLines(logContentText.value, parseInt(maxLines.value))
             logLineCount.value = response.totalLines
+            
+            // 显示警告信息
+            if (response.warning) {
+              showAlert(response.warning, 'warning')
+            }
+            
             // 等待DOM更新后滚动到底部
             await nextTick()
             scrollToBottom()
