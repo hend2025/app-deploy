@@ -235,11 +235,7 @@ export default {
       loading.value = true
       try {
         const response = await appMgtApi.getAppList(searchText.value)
-        if (response.success) {
-          appList.value = response.data
-        } else {
-          showAlert('搜索失败: ' + response.message, 'danger')
-        }
+        appList.value = response.data
       } catch (error) {
         showAlert('搜索失败: ' + error.message, 'danger')
       } finally {
@@ -262,19 +258,15 @@ export default {
     // 确认启动
     const confirmStart = async () => {
       try {
-        const response = await appMgtApi.startApp({
+        await appMgtApi.startApp({
           appCode: currentApp.value.appCode,
           version: startForm.value.version,
           params: startForm.value.params
         })
         
-        if (response.success) {
-          showAlert(`应用启动成功: ${currentApp.value.appCode}`, 'success')
-          startModal.hide()
-          searchApps()
-        } else {
-          showAlert('启动应用失败: ' + response.message, 'danger')
-        }
+        showAlert(`应用启动成功: ${currentApp.value.appCode}`, 'success')
+        startModal.hide()
+        searchApps()
       } catch (error) {
         showAlert('启动应用失败: ' + error.message, 'danger')
       }
@@ -293,18 +285,14 @@ export default {
     // 确认停止
     const confirmStop = async () => {
       try {
-        const response = await appMgtApi.stopApp({
+        await appMgtApi.stopApp({
           appCode: currentApp.value.appCode,
           pid: currentApp.value.pid
         })
         
-        if (response.success) {
-          showAlert('应用已停止', 'success')
-          stopModal.hide()
-          searchApps()
-        } else {
-          showAlert('停止应用失败: ' + response.message, 'danger')
-        }
+        showAlert('应用已停止', 'success')
+        stopModal.hide()
+        searchApps()
       } catch (error) {
         showAlert('停止应用失败: ' + error.message, 'danger')
       }

@@ -101,15 +101,17 @@ export default {
     const loadFileList = async () => {
       try {
         const response = await logFileApi.getFileList()
-        if (response.success) {
-          fileList.value = response.data || []
+        if (response.success && Array.isArray(response.logFiles)) {
+          // 提取 fullPath 字段作为选项值
+          fileList.value = response.logFiles.map(file => file.fullPath)
         } else {
-          showAlert('获取文件列表失败: ' + response.message, 'danger')
+          fileList.value = []
         }
       } catch (error) {
         showAlert('获取文件列表失败: ' + error.message, 'danger')
       }
     }
+
 
     // 文件选择改变
     const onFileChange = () => {
@@ -127,6 +129,15 @@ export default {
       }
     }
 
+    // 限制日志行数
+    const limitLogLines = (content, maxLines) => {
+      const lines = content.split('\n')
+      if (lines.length > maxLines) {
+        return lines.slice(-maxLines).join('\n')
+      }
+      return content
+    }
+
     // 加载日志内容
     const loadLogContent = async () => {
       if (!selectedFile.value) return
@@ -138,21 +149,19 @@ export default {
             selectedFile.value, 
             parseInt(maxLines.value)
           )
-          if (response.success) {
-            logContentText.value = response.content
-            logLineCount.value = response.totalLines
-            setTimeout(() => scrollToBottom(), 100)
-          } else {
-            logContentText.value = '加载日志失败: ' + response.message
-          }
+          logContentText.value = response.content
+          logLineCount.value = response.totalLines
+          setTimeout(() => scrollToBottom(), 100)
         } else {
           // 增量加载
           const response = await logFileApi.readFileIncremental(
             selectedFile.value,
             logLineCount.value
           )
-          if (response.success && response.hasNewContent) {
+          if (response.hasNewContent) {
             logContentText.value += response.content
+            // 限制只保留最新的指定行数
+            logContentText.value = limitLogLines(logContentText.value, parseInt(maxLines.value))
             logLineCount.value = response.totalLines
             scrollToBottom()
           }

@@ -75,23 +75,30 @@ export default {
       }, 3000)
     }
 
+    // 限制日志行数
+    const limitLogLines = (content, maxLines) => {
+      const lines = content.split('\n')
+      if (lines.length > maxLines) {
+        return lines.slice(-maxLines).join('\n')
+      }
+      return content
+    }
+
     // 刷新日志内容
     const refreshLogContent = async () => {
       try {
         if (logLineCount.value === 0) {
-          // 首次加载，读取最后3000行
-          const response = await logFileApi.readFileLastLines(currentLogFile.value, 3000)
-          if (response.success) {
-            logContentText.value = response.content
-            logLineCount.value = response.totalLines
-          } else {
-            logContentText.value = '加载日志失败: ' + response.message
-          }
+          // 首次加载，读取最后2000行
+          const response = await logFileApi.readFileLastLines(currentLogFile.value, 2000)
+          logContentText.value = response.content
+          logLineCount.value = response.totalLines
         } else {
           // 增量加载
           const response = await logFileApi.readFileIncremental(currentLogFile.value, logLineCount.value)
-          if (response.success && response.hasNewContent) {
+          if (response.hasNewContent) {
             logContentText.value += response.content
+            // 限制只保留最新的2000行
+            logContentText.value = limitLogLines(logContentText.value, 2000)
             logLineCount.value = response.totalLines
             scrollToBottom()
           }

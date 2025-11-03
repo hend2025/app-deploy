@@ -176,11 +176,7 @@ export default {
       loading.value = true
       try {
         const response = await verBuildApi.search(searchTerm.value)
-        if (response.success) {
-          versionList.value = response.data
-        } else {
-          showAlert('搜索失败: ' + response.message, 'danger')
-        }
+        versionList.value = response.data
       } catch (error) {
         showAlert('搜索失败: ' + error.message, 'danger')
       } finally {
@@ -207,19 +203,15 @@ export default {
       }
 
       try {
-        const response = await verBuildApi.build({
+        await verBuildApi.build({
           appCode: currentVersion.value.appCode,
           appName: currentVersion.value.appName,
           targetVersion: buildForm.value.targetVersion
         })
         
-        if (response.success) {
-          showAlert('构建任务已启动', 'success')
-          buildModal.hide()
-          searchVersions()
-        } else {
-          showAlert('启动构建失败: ' + response.message, 'danger')
-        }
+        showAlert('构建任务已启动', 'success')
+        buildModal.hide()
+        searchVersions()
       } catch (error) {
         showAlert('启动构建失败: ' + error.message, 'danger')
       }
@@ -228,16 +220,12 @@ export default {
     // 停止应用
     const stopApp = async (version) => {
       try {
-        const response = await verBuildApi.stop({
+        await verBuildApi.stop({
           appCode: version.appCode
         })
         
-        if (response.success) {
-          showAlert('停止操作已执行', 'success')
-          searchVersions()
-        } else {
-          showAlert('停止操作失败: ' + response.message, 'danger')
-        }
+        showAlert('停止操作已执行', 'success')
+        searchVersions()
       } catch (error) {
         showAlert('停止操作失败: ' + error.message, 'danger')
       }
