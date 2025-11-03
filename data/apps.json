@@ -1,37 +1,37 @@
 [ {
   "appCode" : "ims-job-admin",
   "version" : "2.0.1",
-  "params" : "-Xmx512m\n-Xms256m\n-Dfile.encoding=utf-8\n-Dsun.jnu.encoding=UTF-8\n-Dsession.redis.host=127.0.0.1\n-Dsession.redis.password=123456\n-Dserver.port=3838 \n-Dspring.datasource.druid.url=jdbc:mysql://192.168.10.147:3306/xxl_job_test?Unicode=true&characterEncoding=UTF-8&useSSL=false\n-Dspring.datasource.druid.username=root\n-Dspring.datasource.druid.password=123456\n-Dlogging.level.root=info \n-Dsecurity.isPrivilege=true",
-  "logFile" : "/home/logs/ims-job-admin-2.0.1_20251011_093313.log",
-  "updateTime" : "2025-10-11 01:33:13"
+  "params" : "-Xmx512m\n-Xms256m\n-Dfile.encoding=utf-8\n-Dsun.jnu.encoding=UTF-8\n-Dsession.redis.host=127.0.0.1\n-Dsession.redis.password=123456\n-Dserver.port=3838 \n-Dspring.datasource.druid.url=jdbc:mysql://192.168.10.147:3306/xxl_job_test?Unicode=true&characterEncoding=UTF-8&useSSL=false\n-Dspring.datasource.druid.username=root\n-Dspring.datasource.druid.password=123456\n-Dlogging.level.root=warn\n-Dsecurity.isPrivilege=true",
+  "logFile" : "/aeye/logs/ims-job-admin-2.0.1_20251103_100955.log",
+  "updateTime" : "2025-11-03 02:09:55"
 }, {
   "appCode" : "hsa-ims-platform-local-bc",
-  "version" : "v2025.86",
-  "params" : "-Xmx1048m\n-Xms512m\n-Dfile.encoding=utf-8\n-Dsun.jnu.encoding=UTF-8\n-Dnacos_host=192.168.10.147:8848\n-Dspring.cloud.nacos.config.namespace=hsa-ims-scen-hend",
-  "logFile" : "/home/logs/build_medical-platform_v2025.87_20251009_113523.log",
-  "updateTime" : "2025-10-09 03:37:48"
+  "version" : "v2025.89",
+  "params" : "-Xmx4096m\n-Xms512m\n-Dfile.encoding=utf-8\n-Dsun.jnu.encoding=UTF-8\n-Dnacos_host=192.168.10.147:8848\n-Dspring.cloud.nacos.config.namespace=hsa-ims-scen-test\n-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005",
+  "logFile" : "/aeye/logs/hsa-ims-platform-local-bc-v2025.89_20251103_100510.log",
+  "updateTime" : "2025-11-03 02:05:10"
 }, {
   "appCode" : "pms-admin",
   "version" : "2.0.9",
-  "params" : "-Xmx1048m\n-Xms512m\n-Dfile.encoding=utf-8\n-Dsun.jnu.encoding=UTF-8\n-Dnacos_host=192.168.10.147:8848\n-Dspring.cloud.nacos.config.namespace=hsa-ims-scen-hend",
-  "logFile" : "/home/logs/pms-admin-2.0.9_20251009_204947.log",
-  "updateTime" : "2025-10-09 12:49:53"
+  "params" : "-Xmx1048m\n-Xms512m\n-Dfile.encoding=utf-8\n-Dsun.jnu.encoding=UTF-8\n-Dnacos_host=192.168.10.147:8848\n-Dspring.cloud.nacos.config.namespace=hsa-ims-scen-hend\n-Dlogging.level.root=warn \n-Dsecurity.isPrivilege=true",
+  "logFile" : "/aeye/logs/pms-admin-2.0.9_20251103_100958.log",
+  "updateTime" : "2025-11-03 02:09:58"
 }, {
   "appCode" : "hsa-ims-platform-local-isc",
-  "version" : "v2025.86",
-  "params" : "-Xmx1048m\n-Xms512m\n-Dfile.encoding=utf-8\n-Dsun.jnu.encoding=UTF-8\n-Dnacos_host=192.168.10.147:8848\n-Dspring.cloud.nacos.config.namespace=hsa-ims-scen-hend",
-  "logFile" : "/home/logs/hsa-ims-platform-local-isc-v2025.86_20251011_093301.log",
-  "updateTime" : "2025-10-11 01:33:01"
+  "version" : "v2025.89",
+  "params" : "-Xmx1048m\n-Xms512m\n-Dfile.encoding=utf-8\n-Dsun.jnu.encoding=UTF-8\n-Dnacos_host=192.168.10.147:8848\n-Dspring.cloud.nacos.config.namespace=hsa-ims-scen-test",
+  "logFile" : "/aeye/logs/hsa-ims-platform-local-isc-v2025.89_20251103_101044.log",
+  "updateTime" : "2025-11-03 02:10:44"
 }, {
   "appCode" : "hsa-ims-platform-local-api",
-  "version" : "v2025.86",
-  "params" : "-Xmx1048m\n-Xms512m\n-Dfile.encoding=utf-8\n-Dsun.jnu.encoding=UTF-8\n-Dnacos_host=192.168.10.147:8848\n-Dspring.cloud.nacos.config.namespace=hsa-ims-scen-hend",
-  "logFile" : "/home/logs/build_medical-platform_v2025.87_20251009_113523.log",
-  "updateTime" : "2025-10-09 03:37:48"
+  "version" : "v2025.89",
+  "params" : "-Xmx1048m\n-Xms512m\n-Dfile.encoding=utf-8\n-Dsun.jnu.encoding=UTF-8\n-Dnacos_host=192.168.10.147:8848\n-Dspring.cloud.nacos.config.namespace=hsa-ims-scen-test\n-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5006",
+  "logFile" : "/aeye/logs/hsa-ims-platform-local-api-v2025.89_20251103_101037.log",
+  "updateTime" : "2025-11-03 02:10:37"
 }, {
   "appCode" : "hsa-ims-platform-local-bosg",
-  "version" : "v2025.86",
-  "params" : "-Xmx1048m\n-Xms512m\n-Dfile.encoding=utf-8\n-Dsun.jnu.encoding=UTF-8\n-Dnacos_host=192.168.10.147:8848\n-Dspring.cloud.nacos.config.namespace=hsa-ims-scen-hend",
-  "logFile" : "/home/logs/build_medical-platform_v2025.87_20251009_113523.log",
-  "updateTime" : "2025-10-09 03:37:48"
+  "version" : "v2025.89",
+  "params" : "-Xmx1048m\n-Xms512m\n-Dfile.encoding=utf-8\n-Dsun.jnu.encoding=UTF-8\n-Dnacos_host=192.168.10.147:8848\n-Dspring.cloud.nacos.config.namespace=hsa-ims-scen-test",
+  "logFile" : "/aeye/logs/hsa-ims-platform-local-bosg-v2025.89_20251103_101030.log",
+  "updateTime" : "2025-11-03 02:10:31"
 } ]
