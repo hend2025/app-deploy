@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>应用管理</title>
+    <link rel="icon" type="image/x-icon" th:href="@{/favicon.ico}">
+    <link th:href="@{/css/bootstrap.min.css}" rel="stylesheet">
+    <link th:href="@{/css/style.css}" rel="stylesheet">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <!-- 主要内容 -->
+    <div class="container-fluid h-100" style="padding: 15px;">
+        <div class="row h-100">
+            <div class="col-12 d-flex flex-column">
+                <!-- 搜索和操作区域 -->
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <div class="row align-items-center mb-2">
+                            <div class="col-md-9">
+                                <div class="d-flex align-items-center gap-2">
+                                    <label class="form-label mb-0" style="min-width: 80px;">搜索应用</label>
+                                    <input type="text" id="searchInput" class="form-control flex-fill" placeholder="输入应用名称搜索...">
+                                    <button class="btn btn-primary" onclick="searchVersions()" style="min-width: 80px; padding: 8px 16px;">
+                                        搜索
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 版本列表 -->
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>应用编码</th>
+                                        <th>应用名称</th>
+                                        <th>版本号</th>
+                                        <th>更新时间</th>
+                                        <th style="width: 200px; text-align: center;">操作</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="versionTableBody">
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted">
+                                            加载中...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script th:src="@{/js/jquery-3.7.1.min.js}"></script>
+    <script th:src="@{/js/bootstrap.bundle.min.js}"></script>
+    
+    <style>
+        /* 全屏布局基础样式 */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .container-fluid.h-100 {
+            height: calc(100vh - 76px); /* 减去导航栏高度 */
+        }
+        
+        
+        /* 表格样式优化 */
+        .table th {
+            border-top: none;
+            font-weight: 600;
+        }
+        
+        .table td {
+            vertical-align: middle;
+        }
+        
+        /* 操作按钮样式 */
+        .btn-sm {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.875rem;
+        }
+        
+        
+        /* 空间优化 */
+        .card-body {
+            padding: 1rem;
+        }
+        
+        .table-responsive {
+            margin-top: 0.5rem;
+        }
+    </style>
+
+    <script>
+        $(document).ready(function() {
+            searchVersions();
+            
+            // 搜索框回车事件
+            $('#searchInput').on('keypress', function(e) {
+                if (e.which === 13) {
+                    searchVersions();
+                }
+            });
+            
+            // 启动自动刷新
+            startAutoRefresh();
+        });
+ 
+        // 搜索版本
+        function searchVersions() {
+            const searchTerm = $('#searchInput').val();
+            $.ajax({
+                url: '/deploy/verBuild/search',
+                method: 'GET',
+                data: { appName: searchTerm },
+                success: function(response) {
+                    if (response.success) {
+                        appManage = response.data; // 更新全局变量
+                        displayVersions(response.data);
+                    } else {
+                        showAlert('搜索失败: ' + response.message, 'danger');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    showAlert('搜索失败: ' + error, 'danger');
+                }
+            });
+        }
+        
+        // 显示版本列表
+        function displayVersions(versions) {
+            const tbody = $('#versionTableBody');
+            tbody.empty();
+            
+            if (appManage.length === 0) {
+                tbody.append(`
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">
+                            暂无数据
+                        </td>
+                    </tr>
+                `);
+                return;
+            }
+            
+            // 按照应用ID升序排序
+            const sortedVersions = appManage.sort(function(a, b) {
+                // 如果appCode是纯数字，按数字排序；否则按字符串排序
+                const aIsNumber = !isNaN(a.appCode) && !isNaN(parseInt(a.appCode));
+                const bIsNumber = !isNaN(b.appCode) && !isNaN(parseInt(b.appCode));
+                
+                if (aIsNumber && bIsNumber) {
+                    return parseInt(a.appCode) - parseInt(b.appCode);
+                } else if (aIsNumber && !bIsNumber) {
+                    return -1; // 数字排在字符串前面
+                } else if (!aIsNumber && bIsNumber) {
+                    return 1; // 字符串排在数字后面
+                } else {
+                    return a.appCode.localeCompare(b.appCode); // 字符串按字典序排序
+                }
+            });
+            
+            sortedVersions.forEach(function(version) {
+                const row = `
+                    <tr>
+                        <td>${version.appCode}</td>
+                        <td><strong>${version.appName}</strong></td>
+                        <td><span class="badge bg-info">${version.version}</span></td>
+                        <td>${formatDateTime(version.updateTime)}</td>
+                        <td style="text-align: right;">
+                            <div class="d-flex gap-1 justify-content-end">
+                                ${version.status === '0'? 
+                                    `<button class="btn btn-sm btn-outline-info" onclick="buildApp('${version.appCode}', '${version.appName}', '${version.version}')" title="构建">构建</button>` : 
+                                    `<button class="btn btn-sm btn-outline-secondary" disabled title="当前状态不允许构建">构建</button>`
+                                }
+                                ${version.status === '1' ? 
+                                    `<button class="btn btn-sm btn-outline-warning" onclick="stopApp('${version.appCode}')" title="停止">停止</button>` : 
+                                    `<button class="btn btn-sm btn-outline-secondary" disabled title="当前状态不允许停止">停止</button>`
+                                }
+                                <button class="btn btn-sm btn-outline-secondary" onclick="viewLogs('${version.logFile}')" title="日志">
+                                    日志
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+        }                
+        
+        // 应用构建
+        function buildApp(id, appName, currentVersion) {
+            // 创建构建弹窗
+            const modalHtml = `
+                <div class="modal fade" id="buildModal" tabindex="-1" aria-labelledby="buildModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="buildModalLabel">应用构建 - ${appName}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <form id="buildForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">当前版本号</label>
+                                        <input type="text" class="form-control" value="${currentVersion}" readonly>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="targetVersion" class="form-label">目标版本号</label>
+                                        <input type="text" class="form-control" id="targetVersion" value="${currentVersion}" placeholder="请输入目标版本号" required>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                                <button type="button" class="btn btn-primary" onclick="confirmbuild('${id}', '${appName}')">确定构建</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // 移除已存在的模态框
+            $('#buildModal').remove();
+            
+            // 添加新的模态框
+            $('body').append(modalHtml);
+            
+            // 显示模态框
+            const modal = new bootstrap.Modal(document.getElementById('buildModal'));
+            modal.show();
+        }
+        
+        // 确认构建
+        function confirmbuild(appCode, appName) {
+            const targetVersion = $('#targetVersion').val().trim();
+            
+            if (!targetVersion) {
+                showAlert('请输入目标版本号', 'warning');
+                return;
+            }
+
+            // 发送升级请求
+            $.ajax({
+                url: '/deploy/verBuild/build',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    appCode: appCode,
+                    appName: appName,
+                    targetVersion: targetVersion
+                }),
+                success: function(response) {
+                    if (response.success) {
+                        showAlert(`构建任务已启动`, 'success');
+                        
+                        // 关闭模态框
+                        $('#buildModal').modal('hide');
+                     
+                        searchVersions();
+                        
+                    } else {
+                        showAlert('启动构建失败: ' + response.message, 'danger');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    let errorMessage = error;
+                    if (xhr.responseText) {
+                        try {
+                            const errorResponse = JSON.parse(xhr.responseText);
+                            errorMessage = errorResponse.message || error;
+                        } catch (e) {
+                            errorMessage = xhr.responseText;
+                        }
+                    }
+                    showAlert('启动构建失败: ' + errorMessage, 'danger');
+                }
+            });
+        }
+        
+        
+        
+        // 显示日志弹窗
+        function showLogModal(logFileName) {
+            // 重置行数计数，确保每次打开都显示全量内容
+            window.logLineCounts[logFileName] = 0;
+            
+            const modalHtml = `
+                <div class="modal fade" id="logModal" tabindex="-1" aria-labelledby="logModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-fullscreen">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="logModalLabel">日志详情 - ${logFileName}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body" style="padding: 0;">
+                                <div id="logContent" style="height: calc(100vh - 130px); overflow-y: auto; background-color: #f8f9fa; padding: 15px; border: 1px solid #dee2e6; font-family: monospace; white-space: pre-wrap; font-size: 14px; line-height: 1.4;">
+                                    加载中...
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-success" id="autoRefreshBtn" onclick="toggleAutoRefresh('${logFileName}')">自动刷新</button>
+                                    <button class="btn btn-sm btn-info" onclick="scrollToBottom()">到底部</button>
+                                    <button class="btn btn-sm btn-warning" onclick="clearLogContent()">清空</button>
+                                    <button class="btn btn-sm btn-primary" onclick="downloadLogWithFileName('${logFileName}')">下载</button>
+                                </div>
+                                <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal">关闭</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // 移除已存在的日志模态框
+            $('#logModal').remove();
+            
+            // 添加新的日志模态框
+            $('body').append(modalHtml);
+            
+            // 显示模态框
+            const modal = new bootstrap.Modal(document.getElementById('logModal'));
+            modal.show();
+            
+            // 加载日志内容
+            refreshLogContent(logFileName);
+            
+            // 自动开启自动刷新
+            setTimeout(function() {
+                toggleAutoRefresh(logFileName);
+            }, 3000);
+            
+            // 监听模态框关闭事件，停止自动刷新
+            $('#logModal').on('hidden.bs.modal', function() {
+                stopAutoRefresh();
+            });
+        }
+        
+        // 存储每个日志文件的行数，用于增量加载
+        window.logLineCounts = {};
+        
+        // 刷新日志内容（首次显示3000条，后续增量）
+        function refreshLogContent(logFileName) {
+            const currentLineCount = window.logLineCounts[logFileName] || 0;
+            
+            // 如果是首次加载（行数为0），先加载最后3000行
+            if (currentLineCount === 0) {
+                $.ajax({
+                    url: '/deploy/logs/file/read-file-last-lines',
+                    method: 'GET',
+                    data: { fileName: logFileName, lastLines: 3000 },
+                    success: function(response) {
+                        if (response.success) {
+                            $('#logContent').text(response.content);
+                            // 记录总行数，用于后续增量查询
+                            window.logLineCounts[logFileName] = response.totalLines;
+                        } else {
+                            $('#logContent').text('加载日志失败: ' + response.message);
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        let errorMsg = '加载日志失败: ';
+                        if (xhr.responseText) {
+                            try {
+                                const response = JSON.parse(xhr.responseText);
+                                errorMsg += response.message || response.error || error;
+                            } catch (e) {
+                                errorMsg += xhr.responseText || error;
+                            }
+                        } else {
+                            errorMsg += error || status || '未知错误';
+                        }
+                        $('#logContent').text(errorMsg);
+                    }
+                });
+            } else {
+                // 后续加载使用增量方式
+                $.ajax({
+                    url: '/deploy/logs/file/read-file-incremental',
+                    method: 'GET',
+                    data: { fileName: logFileName, fromLine: currentLineCount },
+                    success: function(response) {
+                        if (response.success && response.hasNewContent) {
+                            // 有新内容，追加到现有内容
+                            appendNewLogContent(response.content);
+                            // 更新行数计数
+                            window.logLineCounts[logFileName] = response.totalLines;
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        // 静默处理错误，避免频繁显示错误信息
+                    }
+                });
+            }
+        }
+        
+        // 追加新的日志内容
+        function appendNewLogContent(newContent) {
+            const $logContent = $('#logContent');
+            const existingContent = $logContent.text();
+            $logContent.text(existingContent + newContent);
+            
+            // 自动滚动到底部
+            const logContainer = document.getElementById('logContent');
+            if (logContainer) {
+                logContainer.scrollTop = logContainer.scrollHeight;
+            }
+        }
+        
+        // 停止应用
+        function stopApp(appCode) {
+            // 发送停止请求到后台
+            $.ajax({
+                url: '/deploy/verBuild/stop',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    appCode: appCode
+                }),
+                success: function(response) {
+                    if (response.success) {
+                        showAlert(`停止操作已执行`, 'success');
+                        // 刷新列表
+                        searchVersions();
+                    } else {
+                        showAlert('停止操作失败: ' + response.message, 'danger');
+                    }
+                },
+                error: function(xhr, status, error) {
+                    let errorMessage = error;
+                    if (xhr.responseText) {
+                        try {
+                            const errorResponse = JSON.parse(xhr.responseText);
+                            errorMessage = errorResponse.message || error;
+                        } catch (e) {
+                            errorMessage = xhr.responseText;
+                        }
+                    }
+                    showAlert('停止操作失败: ' + errorMessage, 'danger');
+                }
+            });
+        }
+        
+        // 查看日志
+        function viewLogs(logFile) {
+            if (!logFile) {
+                showAlert('该应用没有日志文件', 'warning');
+                return;
+            }
+            
+            // 提取文件名（去掉路径）
+            const fileName = logFile.split(/[/\\]/).pop();
+            showLogModal(fileName);
+        }
+        
+        // 下载日志（使用文件名）
+        function downloadLogWithFileName(fileName) {
+            if (!fileName) {
+                showAlert('该应用没有日志文件', 'warning');
+                return;
+            }
+            window.open('/deploy/logs/file/download-file?fileName=' + encodeURIComponent(fileName), '_blank');
+        }
+        
+        // 格式化日期时间
+        function formatDateTime(dateTimeStr) {
+            if (!dateTimeStr) return '-';
+            const date = new Date(dateTimeStr);
+            return date.toLocaleString('zh-CN');
+        }
+        
+        // 显示提示信息
+        function showAlert(message, type) {
+            const alertClass = type === 'success' ? 'alert-success' : 
+                              type === 'danger' ? 'alert-danger' : 
+                              type === 'warning' ? 'alert-warning' : 'alert-info';
+            
+            const notification = $(`
+                <div class="alert ${alertClass} alert-dismissible fade show position-fixed" 
+                     style="top: 20px; right: 20px; z-index: 9999; min-width: 300px;">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `);
+            
+            $('body').append(notification);
+            
+            // 3秒后自动消失
+            setTimeout(function() {
+                notification.alert('close');
+            }, 3000);
+        }
+        
+        // 自动刷新相关变量
+        let autoRefreshInterval = null;
+        let listAutoRefreshInterval = null;
+        
+        // 切换自动刷新状态
+        function toggleAutoRefresh(logFileName) {
+            if (autoRefreshInterval) {
+                // 当前正在自动刷新，停止它
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                $('#autoRefreshBtn').text('自动刷新').removeClass('btn-warning').addClass('btn-success');
+            } else {
+                // 当前没有自动刷新，开始它
+                // 立即刷新一次
+                refreshLogContent(logFileName);
+                
+                // 设置3秒自动刷新
+                autoRefreshInterval = setInterval(function() {
+                    refreshLogContent(logFileName);
+                }, 3000);
+                
+                $('#autoRefreshBtn').text('停止刷新').removeClass('btn-success').addClass('btn-warning');
+            }
+        }
+        
+        // 停止自动刷新（供模态框关闭时调用）
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
+        
+        // 清空日志内容
+        function clearLogContent() {
+            $('#logContent').text('');
+        }
+
+        // 滚动到底部
+        function scrollToBottom() {
+            const logContent = document.getElementById('logContent');
+            if (logContent) {
+                logContent.scrollTop = logContent.scrollHeight;
+            }
+        }
+        
+        // 检查是否有模态框打开
+        function hasModalOpen() {
+            // 检查升级模态框
+            const buildModal = document.getElementById('buildModal');
+            if (buildModal && buildModal.classList.contains('show')) {
+                return true;
+            }
+            
+            // 检查日志模态框
+            const logModal = document.getElementById('logModal');
+            if (logModal && logModal.classList.contains('show')) {
+                return true;
+            }
+            
+            // 检查是否有任何Bootstrap模态框打开
+            const openModals = document.querySelectorAll('.modal.show');
+            return openModals.length > 0;
+        }
+        
+        // 启动列表自动刷新
+        function startAutoRefresh() {
+            // 每10秒检查一次是否需要刷新
+            listAutoRefreshInterval = setInterval(function() {
+                // 只有在没有模态框打开时才刷新
+                if (!hasModalOpen()) {
+                    searchVersions();
+                }
+            }, 10000);
+        }
+        
+        // 停止列表自动刷新
+        function stopListAutoRefresh() {
+            if (listAutoRefreshInterval) {
+                clearInterval(listAutoRefreshInterval);
+                listAutoRefreshInterval = null;
+            }
+        }
+    </script>
+    
+</body>
+</html>

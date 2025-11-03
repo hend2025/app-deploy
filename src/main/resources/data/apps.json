@@ -1,0 +1,19 @@
+[ {
+  "appCode" : "jar_ims-job-admin-2.0.1.jar",
+  "appName" : "ims-job-admin",
+  "params" : "-Xmx1048m\n-Xms512m\n-Dfile.encoding=utf-8\n-Dsun.jnu.encoding=UTF-8\n-Dnacos_host=192.168.10.147:8848\n-Dspring.cloud.nacos.config.namespace=hsa-ims-scen-hend",
+  "status" : "2",
+  "pid" : null,
+  "logFile" : "/home/logs/ims-job-admin-2.0.1_20251004_193853.log",
+  "startTime" : "2025-10-04 11:38:53",
+  "updateTime" : "2025-10-04 11:38:53"
+}, {
+  "appCode" : "jar_pms-admin-2.0.9.jar",
+  "appName" : "pms-admin",
+  "params" : "-Xmx1048m\n-Xms512m\n-Dfile.encoding=utf-8\n-Dsun.jnu.encoding=UTF-8\n-Dnacos_host=192.168.10.147:8848\n-Dspring.cloud.nacos.config.namespace=hsa-ims-scen-hend",
+  "status" : "2",
+  "pid" : null,
+  "logFile" : "/home/logs/pms-admin-2.0.9_20251004_193855.log",
+  "startTime" : "2025-10-04 11:38:55",
+  "updateTime" : "2025-10-04 11:38:55"
+} ]

@@ -1,0 +1,37 @@
+[ {
+  "appCode" : "medical-platform",
+  "appName" : "场景监控后台",
+  "version" : "v2025.87",
+  "status" : "0",
+  "script" : "/aeye/scripts/medical-platform.sh",
+  "threadId" : "",
+  "logFile" : "",
+  "updateTime" : "2025-10-08 08:54:59"
+}, {
+  "appCode" : "scene_institution",
+  "appName" : "场景监控his-ui",
+  "version" : "v2025.87",
+  "status" : "0",
+  "script" : "/aeye/scripts/scene_institution.sh",
+  "threadId" : "",
+  "logFile" : "",
+  "updateTime" : "2025-09-29 06:53:51"
+}, {
+  "appCode" : "hospital-h5-v3",
+  "appName" : "场景监控his-h5",
+  "version" : "v2025.87",
+  "status" : "0",
+  "script" : "/aeye/scripts/hospital-h5-v3.sh",
+  "threadId" : "",
+  "logFile" : "",
+  "updateTime" : "2025-09-29 06:53:51"
+}, {
+  "appCode" : "single-portal-scene",
+  "appName" : "场景监控web-ui",
+  "version" : "v2025.87",
+  "status" : "0",
+  "script" : "/aeye/scripts/single-portal-scene.sh",
+  "threadId" : "",
+  "logFile" : "",
+  "updateTime" : "2025-09-29 06:53:51"
+} ]

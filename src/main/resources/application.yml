@@ -1,0 +1,34 @@
+server:
+  port: 7080
+  servlet:
+    context-path: /deploy
+
+spring:
+  application:
+    name: app-deploy
+  
+  web:
+    resources:
+      static-locations: classpath:/static/
+      cache:
+        period: 0
+  
+  thymeleaf:
+    cache: false
+    prefix: classpath:/templates/
+    suffix: .html
+    mode: HTML
+    encoding: UTF-8
+
+app:
+  directory:
+    data: /home/data
+    release: /home/release
+    logs: /home/logs
+  log:
+    cleanup:
+      enabled: true
+      retention-days: 10
+      schedule: "0 0 2 * * ?"
+
+

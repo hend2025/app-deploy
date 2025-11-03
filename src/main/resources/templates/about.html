@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>关于我们</title>
+    <link rel="icon" type="image/x-icon" th:href="@{/favicon.ico}">
+    <link th:href="@{/css/bootstrap.min.css}" rel="stylesheet">
+    <link th:href="@{/css/style.css}" rel="stylesheet">
+</head>
+<body>
+    <!-- 导航栏 -->
+    <div th:replace="fragments/navbar :: navbar"></div>
+
+    <!-- 主要内容 -->
+    <div class="container-fluid h-100" style="padding: 15px; overflow-y: auto;">
+        <div class="container mt-4">
+            <div class="row">
+                <div class="col-12">
+                    <div class="jumbotron bg-light p-5 rounded">
+                        <h1 class="display-4">关于我们</h1>
+                        <p class="lead">这是一个使用Spring Boot + HTML + jQuery开发的版本发布工具</p>
+                    </div>
+                </div>
+            </div>
+
+        <div class="row" style="margin-top: 30px;">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>技术栈</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item">
+                                <strong>后端：</strong>Spring Boot 3.2.0
+                            </li>
+                            <li class="list-group-item">
+                                <strong>前端：</strong>HTML5 + jQuery 3.7.1
+                            </li>
+                            <li class="list-group-item">
+                                <strong>UI框架：</strong>Bootstrap 5.3.0
+                            </li>
+                            <li class="list-group-item">
+                                <strong>模板引擎：</strong>Thymeleaf
+                            </li>
+                            <li class="list-group-item">
+                                <strong>构建工具：</strong>Maven
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5>项目特性</h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item">
+                                RESTful API 接口
+                            </li>
+                            <li class="list-group-item">
+                                AJAX 异步请求
+                            </li>
+                            <li class="list-group-item">
+                                响应式设计
+                            </li>
+                            <li class="list-group-item">
+                                热重载开发
+                            </li>
+                            <li class="list-group-item">
+                                现代化UI界面
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        </div>
+    </div>
+ 
+    <script th:src="@{/js/jquery-3.7.1.min.js}"></script>
+    <script th:src="@{/js/bootstrap.bundle.min.js}"></script>
+
+    <!-- 自定义JavaScript -->
+    <script th:src="@{/js/main.js}"></script>
+</body>
+</html>
