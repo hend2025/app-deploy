@@ -1,7 +1,6 @@
 package com.aeye.app.deploy.controller;
 
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 
@@ -9,22 +8,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 @RequestMapping("/")
 public class HomeController {
 
-    @GetMapping
-    public String home(Model model) {return "verMgt"; }
-
-    @GetMapping("/appMgt")
-    public String appManage(Model model) {
-        return "appMgt";
-    }
-
-    @GetMapping("/logMgt")
-    public String apps(Model model) {
-        return "logMgt";
-    }
-
-    @GetMapping("/about")
-    public String about(Model model) {
-        return "about";
+    // 所有前端路由都返回index.html，由Vue Router处理
+    @GetMapping(value = {"", "/", "/appMgt", "/logMgt", "/about"})
+    public String index() {
+        return "forward:/index.html";
     }
 
 }

@@ -1,0 +1,243 @@
+<template>
+  <div class="container-fluid h-100">
+    <div class="row h-100">
+      <div class="col-12 d-flex flex-column">
+        <!-- 文件控制区域 -->
+        <div class="file-controls-container">
+          <div class="file-controls d-flex align-items-center gap-2">
+            <select 
+              v-model="selectedFile" 
+              @change="onFileChange"
+              class="form-select me-2" 
+              style="flex: 1; min-width: 500px;"
+            >
+              <option value="">请选择日志文件...</option>
+              <option v-for="file in fileList" :key="file" :value="file">
+                {{ file }}
+              </option>
+            </select>
+            <select v-model="maxLines" class="form-select me-2" style="width: 100px;">
+              <option value="2000">2000</option>
+              <option value="5000">5000</option>
+              <option value="10000">10000</option>
+              <option value="20000">20000</option>
+              <option value="50000">50000</option>
+            </select>
+            <button 
+              class="btn me-2"
+              :class="autoRefreshEnabled ? 'btn-outline-warning' : 'btn-outline-success'"
+              @click="toggleAutoRefresh"
+              :title="autoRefreshEnabled ? '停止自动刷新' : '开启自动刷新'"
+            >
+              {{ autoRefreshEnabled ? '停止刷新' : '自动刷新' }}
+            </button>
+            <button 
+              class="btn btn-outline-success me-2" 
+              @click="downloadCurrentLog"
+              :disabled="!selectedFile"
+              title="下载文件"
+            >
+              下载
+            </button>
+            <button 
+              class="btn btn-outline-info me-2" 
+              @click="scrollToBottom"
+              :disabled="!selectedFile"
+              title="滚动到底部"
+            >
+              到底部
+            </button>
+            <button 
+              class="btn btn-outline-danger me-2" 
+              @click="clearContent"
+              :disabled="!selectedFile"
+              title="清空内容"
+            >
+              清空
+            </button>
+          </div>
+        </div>
+        
+        <!-- 默认内容区域 -->
+        <div v-if="!selectedFile" class="flex-grow-1">
+          <div class="text-center text-muted h-100 d-flex flex-column justify-content-center">
+            <p>请选择一个日志文件查看实时内容</p>
+          </div>
+        </div>
+        
+        <!-- 日志内容区域 -->
+        <div 
+          v-else
+          ref="logContent"
+          class="flex-grow-1"
+          style="overflow-y: auto; background-color: #f8f9fa; padding: 15px; border: 1px solid #dee2e6; font-family: monospace; white-space: pre-wrap; font-size: 14px; line-height: 1.4; margin: 10px;"
+        >
+          {{ logContentText }}
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { ref, onMounted, onUnmounted } from 'vue'
+import { logFileApi } from '../api'
+import { showAlert } from '../utils/alert'
+
+export default {
+  name: 'LogMgt',
+  setup() {
+    const fileList = ref([])
+    const selectedFile = ref('')
+    const maxLines = ref('2000')
+    const logContentText = ref('')
+    const logLineCount = ref(0)
+    const autoRefreshEnabled = ref(false)
+    const logContent = ref(null)
+    
+    let autoRefreshInterval = null
+
+    // 获取文件列表
+    const loadFileList = async () => {
+      try {
+        const response = await logFileApi.getFileList()
+        if (response.success) {
+          fileList.value = response.data || []
+        } else {
+          showAlert('获取文件列表失败: ' + response.message, 'danger')
+        }
+      } catch (error) {
+        showAlert('获取文件列表失败: ' + error.message, 'danger')
+      }
+    }
+
+    // 文件选择改变
+    const onFileChange = () => {
+      if (selectedFile.value) {
+        logLineCount.value = 0
+        logContentText.value = '加载中...'
+        loadLogContent()
+        
+        // 自动开启刷新
+        if (!autoRefreshEnabled.value) {
+          setTimeout(() => {
+            toggleAutoRefresh()
+          }, 1000)
+        }
+      }
+    }
+
+    // 加载日志内容
+    const loadLogContent = async () => {
+      if (!selectedFile.value) return
+
+      try {
+        if (logLineCount.value === 0) {
+          // 首次加载
+          const response = await logFileApi.readFileLastLines(
+            selectedFile.value, 
+            parseInt(maxLines.value)
+          )
+          if (response.success) {
+            logContentText.value = response.content
+            logLineCount.value = response.totalLines
+            setTimeout(() => scrollToBottom(), 100)
+          } else {
+            logContentText.value = '加载日志失败: ' + response.message
+          }
+        } else {
+          // 增量加载
+          const response = await logFileApi.readFileIncremental(
+            selectedFile.value,
+            logLineCount.value
+          )
+          if (response.success && response.hasNewContent) {
+            logContentText.value += response.content
+            logLineCount.value = response.totalLines
+            scrollToBottom()
+          }
+        }
+      } catch (error) {
+        if (logLineCount.value === 0) {
+          logContentText.value = '加载日志失败: ' + error.message
+        }
+      }
+    }
+
+    // 切换自动刷新
+    const toggleAutoRefresh = () => {
+      if (autoRefreshEnabled.value) {
+        // 停止自动刷新
+        if (autoRefreshInterval) {
+          clearInterval(autoRefreshInterval)
+          autoRefreshInterval = null
+        }
+        autoRefreshEnabled.value = false
+      } else {
+        // 开启自动刷新
+        if (!selectedFile.value) {
+          showAlert('请先选择日志文件', 'warning')
+          return
+        }
+        loadLogContent()
+        autoRefreshInterval = setInterval(() => {
+          loadLogContent()
+        }, 3000)
+        autoRefreshEnabled.value = true
+      }
+    }
+
+    // 滚动到底部
+    const scrollToBottom = () => {
+      if (logContent.value) {
+        logContent.value.scrollTop = logContent.value.scrollHeight
+      }
+    }
+
+    // 清空内容
+    const clearContent = () => {
+      logContentText.value = ''
+    }
+
+    // 下载当前日志
+    const downloadCurrentLog = () => {
+      if (selectedFile.value) {
+        window.open(logFileApi.downloadFile(selectedFile.value), '_blank')
+      }
+    }
+
+    onMounted(() => {
+      loadFileList()
+    })
+
+    onUnmounted(() => {
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval)
+      }
+    })
+
+    return {
+      fileList,
+      selectedFile,
+      maxLines,
+      logContentText,
+      autoRefreshEnabled,
+      logContent,
+      onFileChange,
+      toggleAutoRefresh,
+      scrollToBottom,
+      clearContent,
+      downloadCurrentLog
+    }
+  }
+}
+</script>
+
+<style scoped>
+.file-controls-container {
+  padding: 15px;
+  background-color: #f8f9fa;
+  border-bottom: 1px solid #dee2e6;
+}
+</style>
+

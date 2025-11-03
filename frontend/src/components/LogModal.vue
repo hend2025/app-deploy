@@ -1,0 +1,176 @@
+<template>
+  <div class="modal fade" id="logModal" tabindex="-1" ref="modalElement">
+    <div class="modal-dialog modal-fullscreen">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">日志详情 - {{ currentLogFile }}</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body" style="padding: 0;">
+          <div 
+            id="logContent" 
+            ref="logContent"
+            style="height: calc(100vh - 130px); overflow-y: auto; background-color: #f8f9fa; padding: 15px; border: 1px solid #dee2e6; font-family: monospace; white-space: pre-wrap; font-size: 14px; line-height: 1.4;"
+          >
+            {{ logContentText }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <div class="d-flex gap-2">
+            <button 
+              class="btn btn-sm" 
+              :class="autoRefreshEnabled ? 'btn-warning' : 'btn-success'"
+              @click="toggleAutoRefresh"
+            >
+              {{ autoRefreshEnabled ? '停止刷新' : '自动刷新' }}
+            </button>
+            <button class="btn btn-sm btn-info" @click="scrollToBottom">到底部</button>
+            <button class="btn btn-sm btn-warning" @click="clearLogContent">清空</button>
+            <button class="btn btn-sm btn-primary" @click="downloadLog">下载</button>
+          </div>
+          <button type="button" class="btn btn-sm btn-primary" data-bs-dismiss="modal">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script>
+import { ref, onUnmounted } from 'vue'
+import { Modal } from 'bootstrap'
+import { logFileApi } from '../api'
+
+export default {
+  name: 'LogModal',
+  setup() {
+    const currentLogFile = ref('')
+    const logContentText = ref('加载中...')
+    const logLineCount = ref(0)
+    const autoRefreshEnabled = ref(false)
+    const modalElement = ref(null)
+    const logContent = ref(null)
+    
+    let autoRefreshInterval = null
+    let modalInstance = null
+
+    // 显示日志
+    const showLog = (fileName) => {
+      currentLogFile.value = fileName
+      logLineCount.value = 0
+      logContentText.value = '加载中...'
+      
+      if (!modalInstance) {
+        modalInstance = new Modal(modalElement.value)
+      }
+      modalInstance.show()
+      
+      // 加载日志内容
+      refreshLogContent()
+      
+      // 3秒后自动开启自动刷新
+      setTimeout(() => {
+        if (!autoRefreshEnabled.value) {
+          toggleAutoRefresh()
+        }
+      }, 3000)
+    }
+
+    // 刷新日志内容
+    const refreshLogContent = async () => {
+      try {
+        if (logLineCount.value === 0) {
+          // 首次加载，读取最后3000行
+          const response = await logFileApi.readFileLastLines(currentLogFile.value, 3000)
+          if (response.success) {
+            logContentText.value = response.content
+            logLineCount.value = response.totalLines
+          } else {
+            logContentText.value = '加载日志失败: ' + response.message
+          }
+        } else {
+          // 增量加载
+          const response = await logFileApi.readFileIncremental(currentLogFile.value, logLineCount.value)
+          if (response.success && response.hasNewContent) {
+            logContentText.value += response.content
+            logLineCount.value = response.totalLines
+            scrollToBottom()
+          }
+        }
+      } catch (error) {
+        if (logLineCount.value === 0) {
+          logContentText.value = '加载日志失败: ' + error.message
+        }
+      }
+    }
+
+    // 切换自动刷新
+    const toggleAutoRefresh = () => {
+      if (autoRefreshEnabled.value) {
+        // 停止自动刷新
+        if (autoRefreshInterval) {
+          clearInterval(autoRefreshInterval)
+          autoRefreshInterval = null
+        }
+        autoRefreshEnabled.value = false
+      } else {
+        // 开启自动刷新
+        refreshLogContent()
+        autoRefreshInterval = setInterval(() => {
+          refreshLogContent()
+        }, 3000)
+        autoRefreshEnabled.value = true
+      }
+    }
+
+    // 滚动到底部
+    const scrollToBottom = () => {
+      if (logContent.value) {
+        logContent.value.scrollTop = logContent.value.scrollHeight
+      }
+    }
+
+    // 清空日志内容
+    const clearLogContent = () => {
+      logContentText.value = ''
+    }
+
+    // 下载日志
+    const downloadLog = () => {
+      if (currentLogFile.value) {
+        window.open(logFileApi.downloadFile(currentLogFile.value), '_blank')
+      }
+    }
+
+    // 监听模态框关闭事件
+    if (modalElement.value) {
+      modalElement.value.addEventListener('hidden.bs.modal', () => {
+        if (autoRefreshInterval) {
+          clearInterval(autoRefreshInterval)
+          autoRefreshInterval = null
+        }
+        autoRefreshEnabled.value = false
+      })
+    }
+
+    onUnmounted(() => {
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval)
+      }
+    })
+
+    return {
+      currentLogFile,
+      logContentText,
+      autoRefreshEnabled,
+      modalElement,
+      logContent,
+      showLog,
+      toggleAutoRefresh,
+      scrollToBottom,
+      clearLogContent,
+      downloadLog
+    }
+  }
+}
+</script>
+

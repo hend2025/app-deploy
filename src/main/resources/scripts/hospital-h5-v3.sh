@@ -10,9 +10,6 @@ PROJECT_NAME="hospital-h5-v3"
 GIT_URL="http://192.168.24.21/superman/hospital-h5-v3.git"
 PROJECT_HOME="$WORKSPACE/$PROJECT_NAME"
 
-# 设置严格错误检查
-set -e
-
 # 参数检查
 BRANCH_TAG="$1"
 
@@ -25,8 +22,7 @@ fi
 # 创建必要目录
 if [ ! -d "$WORKSPACE" ]; then
     echo "创建工作空间目录: $WORKSPACE"
-    mkdir -p "$WORKSPACE"
-    if [ $? -ne 0 ]; then
+    if ! mkdir -p "$WORKSPACE"; then
         echo "错误: 创建工作空间目录失败!"
         exit 1
     fi
@@ -39,59 +35,52 @@ if [ -d "$PROJECT_HOME" ]; then
     echo "项目目录已存在，执行更新操作..."
     cd "$PROJECT_HOME" || exit 1
     
-    # 检查当前是否在正确的分支
-    CURRENT_BRANCH=$(git branch --show-current 2>/dev/null)
+    # 丢失所有未提交的修改
+    git reset --hard HEAD
     
-    echo "当前分支: $CURRENT_BRANCH"
-    echo "目标分支: $BRANCH_TAG"
+    # 获取远程更新
+    git fetch origin
     
-    if [ "$CURRENT_BRANCH" = "$BRANCH_TAG" ]; then
-        echo "已在目标分支，执行拉取..."
-        git pull origin "$BRANCH_TAG"
-        if [ $? -ne 0 ]; then
-            echo "警告: Git拉取失败，尝试继续构建..."
-        fi
-    else
-        echo "切换到分支/Tag: $BRANCH_TAG"
+    # 检查目标是否存在
+    if ! git show-ref --verify --quiet "refs/remotes/origin/$BRANCH_TAG" && \
+       ! git show-ref --verify --quiet "refs/tags/$BRANCH_TAG"; then
+        echo "错误: 分支/Tag '$BRANCH_TAG' 在远程不存在!"
+        exit 1
+    fi
+    
+    # 切换到目标分支/Tag
+    if git checkout "$BRANCH_TAG" 2>/dev/null; then
+        echo "√ 切换到 $BRANCH_TAG 成功"
         
-        # 先尝试切换到已有分支或Tag
-        git checkout "$BRANCH_TAG" 2>/dev/null
-        if [ $? -ne 0 ]; then
-            echo "分支/Tag不存在，尝试从origin拉取..."
-            git fetch origin
-            
-            # 尝试创建并切换到新分支
-            git checkout -b "$BRANCH_TAG" "origin/$BRANCH_TAG" 2>/dev/null
-            if [ $? -ne 0 ]; then
-                # 可能是tag，直接checkout
-                git checkout "$BRANCH_TAG" 2>/dev/null
-                if [ $? -ne 0 ]; then
-                    echo "错误: 无法切换到指定分支/Tag: $BRANCH_TAG"
-                    echo "请确认分支/Tag是否存在"
-                    exit 1
-                fi
+        # 如果是分支，拉取最新代码
+        if git symbolic-ref -q HEAD >/dev/null; then
+            echo "正在拉取最新代码..."
+            if git pull origin "$BRANCH_TAG"; then
+                echo "√ 代码更新完成"
+            else
+                echo "警告: 代码拉取失败，继续构建..."
             fi
         fi
-        
-        # 拉取最新代码（如果是分支）
-        git pull origin "$BRANCH_TAG" 2>/dev/null
-        if [ $? -ne 0 ]; then
-            echo "警告: 拉取失败，可能Tag不需要拉取，继续构建..."
-        fi
+    else
+        echo "错误: 无法切换到指定分支/Tag: $BRANCH_TAG"
+        exit 1
     fi
+    
 else
     echo "项目目录不存在，执行克隆操作..."
     cd "$WORKSPACE" || exit 1
-    echo "执行: git clone -b $BRANCH_TAG \"$GIT_URL\" \"$PROJECT_NAME\""
     
-    git clone -b "$BRANCH_TAG" "$GIT_URL" "$PROJECT_NAME"
-    if [ $? -ne 0 ]; then
-        echo "错误: Git克隆失败!"
-        echo "请检查: "
-        echo "  - Git地址是否正确: $GIT_URL"
-        echo "  - 分支/Tag是否存在: $BRANCH_TAG"  
-        echo "  - 网络连接是否正常"
-        echo "  - 是否有访问权限"
+    # 验证分支/Tag是否存在
+    if git ls-remote --exit-code "$GIT_URL" "$BRANCH_TAG" >/dev/null 2>&1; then
+        echo "正在克隆代码库..."
+        if git clone -b "$BRANCH_TAG" "$GIT_URL" "$PROJECT_NAME"; then
+            echo "√ 克隆成功"
+        else
+            echo "错误: Git克隆失败!"
+            exit 1
+        fi
+    else
+        echo "错误: 分支/Tag '$BRANCH_TAG' 在远程仓库中不存在!"
         exit 1
     fi
 fi
@@ -101,34 +90,13 @@ echo "√ 代码库操作完成"
 # 检查必要的命令是否存在
 echo
 echo "[2/3] 检查构建环境..."
-check_command() {
-    if ! command -v $1 &> /dev/null; then
-        echo "错误: $1 命令未找到!"
-        echo "请安装 $1 或检查环境变量"
-        return 1
-    fi
-    echo "√ $1 命令可用"
-    return 0
-}
-
-# 检查 nvm
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
     source "$HOME/.nvm/nvm.sh"
-    echo "√ nvm 已加载"
-elif [ -s "/usr/local/opt/nvm/nvm.sh" ]; then
-    source "/usr/local/opt/nvm/nvm.sh"
     echo "√ nvm 已加载"
 else
     echo "错误: nvm 未安装或未找到!"
     echo "请先安装 nvm:"
     echo "  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.0/install.sh | bash"
-    exit 1
-fi
-
-# 检查 yarn
-if ! check_command "yarn"; then
-    echo "请安装 yarn:"
-    echo "  npm install -g yarn"
     exit 1
 fi
 
@@ -139,23 +107,25 @@ echo "[3/3] 执行NPM打包..."
 cd "$PROJECT_HOME" || exit 1
 
 # 使用 nvm 并设置 Node.js 版本
-nvm use v14.18.3 || {
+if nvm use v14.18.3; then
+    echo "当前 Node.js 版本: $(node --version)"
+else
     echo "错误: Node.js v14.18.3 未安装!"
     echo "请安装: nvm install v14.18.3"
     exit 1
-}
-
-echo "当前 Node.js 版本: $(node --version)"
-echo "当前 Yarn 版本: $(yarn --version)"
+fi
 
 # 执行构建
-yarn build
-
-if [ $? -eq 0 ]; then
+if yarn build; then
     echo
-    echo "√ NPM打包成功"
+    echo "√ yarn打包成功"   
 else
     echo
-    echo "× NPM打包失败!"
+    echo "× yarn打包失败!"
     exit 1
 fi
+
+chmod -R 755 his-h5
+
+echo
+echo "🎉 所有步骤已完成!"

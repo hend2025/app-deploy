@@ -12,13 +12,6 @@ spring:
       static-locations: classpath:/static/
       cache:
         period: 0
-  
-  thymeleaf:
-    cache: false
-    prefix: classpath:/templates/
-    suffix: .html
-    mode: HTML
-    encoding: UTF-8
 
 app:
   directory:
