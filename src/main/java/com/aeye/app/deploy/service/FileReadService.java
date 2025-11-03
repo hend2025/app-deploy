@@ -194,14 +194,22 @@ public class FileReadService {
                 String classpathPath = logsDir.substring("classpath:".length());
                 file = ResourceUtils.getFile("classpath:" + classpathPath + "/" + fileName);
             } else {
-                // 绝对路径或相对路径
-                file = new File(logsDir, fileName);
+                // 判断 fileName 是否为绝对路径
+                File tempFile = new File(fileName);
+                if (tempFile.isAbsolute()) {
+                    // 如果是绝对路径，直接使用
+                    file = tempFile;
+                } else {
+                    // 如果是相对路径，拼接 logsDir
+                    file = new File(logsDir, fileName);
+                }
             }
             
             if (!file.exists()) {
                 result.put("success", false);
                 result.put("message", "文件不存在: " + fileName);
                 result.put("configuredDirectory", logsDir);
+                result.put("resolvedPath", file.getAbsolutePath());
                 return result;
             }
             
@@ -239,14 +247,22 @@ public class FileReadService {
                 String classpathPath = logsDir.substring("classpath:".length());
                 file = ResourceUtils.getFile("classpath:" + classpathPath + "/" + fileName);
             } else {
-                // 绝对路径或相对路径
-                file = new File(logsDir, fileName);
+                // 判断 fileName 是否为绝对路径
+                File tempFile = new File(fileName);
+                if (tempFile.isAbsolute()) {
+                    // 如果是绝对路径，直接使用
+                    file = tempFile;
+                } else {
+                    // 如果是相对路径，拼接 logsDir
+                    file = new File(logsDir, fileName);
+                }
             }
             
             if (!file.exists()) {
                 result.put("success", false);
                 result.put("message", "文件不存在: " + fileName);
                 result.put("configuredDirectory", logsDir);
+                result.put("resolvedPath", file.getAbsolutePath());
                 return result;
             }
             
@@ -304,14 +320,22 @@ public class FileReadService {
                 String classpathPath = logsDir.substring("classpath:".length());
                 file = ResourceUtils.getFile("classpath:" + classpathPath + "/" + fileName);
             } else {
-                // 绝对路径或相对路径
-                file = new File(logsDir, fileName);
+                // 判断 fileName 是否为绝对路径
+                File tempFile = new File(fileName);
+                if (tempFile.isAbsolute()) {
+                    // 如果是绝对路径，直接使用
+                    file = tempFile;
+                } else {
+                    // 如果是相对路径，拼接 logsDir
+                    file = new File(logsDir, fileName);
+                }
             }
             
             if (!file.exists()) {
                 result.put("success", false);
                 result.put("message", "文件不存在: " + fileName);
                 result.put("configuredDirectory", logsDir);
+                result.put("resolvedPath", file.getAbsolutePath());
                 return result;
             }
             

@@ -36,7 +36,7 @@
 </template>
 
 <script>
-import { ref, onUnmounted } from 'vue'
+import { ref, onUnmounted, nextTick } from 'vue'
 import { Modal } from 'bootstrap'
 import { logFileApi } from '../api'
 
@@ -92,6 +92,9 @@ export default {
           const response = await logFileApi.readFileLastLines(currentLogFile.value, 2000)
           logContentText.value = response.content
           logLineCount.value = response.totalLines
+          // 等待DOM更新后滚动到底部
+          await nextTick()
+          scrollToBottom()
         } else {
           // 增量加载
           const response = await logFileApi.readFileIncremental(currentLogFile.value, logLineCount.value)
@@ -100,6 +103,8 @@ export default {
             // 限制只保留最新的2000行
             logContentText.value = limitLogLines(logContentText.value, 2000)
             logLineCount.value = response.totalLines
+            // 等待DOM更新后滚动到底部
+            await nextTick()
             scrollToBottom()
           }
         }
