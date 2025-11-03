@@ -64,7 +64,7 @@ export const verBuildApi = {
 export const logFileApi = {
   // 获取日志文件列表
   getFileList() {
-    return api.get('/logs/file/list')
+    return api.get('/logs/file/log-files')
   },
   // 读取文件最后N行
   readFileLastLines(fileName, lastLines = 3000) {

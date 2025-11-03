@@ -5,7 +5,6 @@ import com.aeye.app.deploy.service.VerMgtService;
 import com.aeye.app.deploy.service.BuildTaskService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -13,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.io.File;
 
-@Controller
+@RestController
 @RequestMapping("/verBuild")
 public class VerBuildController {
 
@@ -24,7 +23,6 @@ public class VerBuildController {
     private BuildTaskService buildTaskService;
 
     @GetMapping("/search")
-    @ResponseBody
     public ResponseEntity<Map<String, Object>> searchVersions(@RequestParam(required = false) String appName) {
         try {
             List<VerInfo> versions;
@@ -48,7 +46,6 @@ public class VerBuildController {
     }
 
     @PostMapping("/build")
-    @ResponseBody
     public ResponseEntity<Map<String, Object>> startBuild(@RequestBody Map<String, String> request) {
         try {
             String appCode = request.get("appCode");
@@ -112,7 +109,6 @@ public class VerBuildController {
     }
 
     @PostMapping("/stop")
-    @ResponseBody
     public ResponseEntity<Map<String, Object>> stopBuild(@RequestBody Map<String, String> request) {
         try {
             String appCode = request.get("appCode");
