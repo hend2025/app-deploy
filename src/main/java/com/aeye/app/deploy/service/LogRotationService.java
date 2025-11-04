@@ -17,10 +17,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-/**
- * 日志文件滚动服务
- * 监控日志文件大小，超过指定大小时自动分割文件
- */
 @Service
 public class LogRotationService implements CommandLineRunner {
 
@@ -50,9 +46,6 @@ public class LogRotationService implements CommandLineRunner {
         }
     }
 
-    /**
-     * 启动日志滚动调度器
-     */
     private void startRotationScheduler() {
         scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread thread = new Thread(r, "LogRotationScheduler");
@@ -71,9 +64,6 @@ public class LogRotationService implements CommandLineRunner {
         logger.info("日志滚动调度器已启动");
     }
 
-    /**
-     * 检查并滚动日志文件
-     */
     private void checkAndRotateLogs() {
         try {
             List<AppInfo> apps = appMgtService.getAllApps();
@@ -94,7 +84,6 @@ public class LogRotationService implements CommandLineRunner {
                     continue;
                 }
 
-                // 检查文件大小
                 long fileSize = logFile.length();
                 if (fileSize >= maxSizeBytes) {
                     logger.info("日志文件超过限制: {} ({} MB), 开始滚动", 
@@ -107,36 +96,27 @@ public class LogRotationService implements CommandLineRunner {
         }
     }
 
-    /**
-     * 滚动日志文件
-     */
     private void rotateLogFile(AppInfo app, File currentLogFile) {
         try {
             String currentPath = currentLogFile.getAbsolutePath();
             String parentDir = currentLogFile.getParent();
             String fileName = currentLogFile.getName();
 
-            // 移除 .log 扩展名
             String baseName = fileName;
             if (fileName.endsWith(".log")) {
                 baseName = fileName.substring(0, fileName.length() - 4);
             }
 
-            // 生成归档文件名：原文件名.序号.log
             String archivedFileName = generateArchivedFileName(parentDir, baseName);
             File archivedFile = new File(parentDir, archivedFileName);
 
-            // 重命名当前日志文件为归档文件
             logger.info("归档日志文件: {} -> {}", currentPath, archivedFile.getAbsolutePath());
             Files.move(currentLogFile.toPath(), archivedFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
-            // 创建新的空日志文件
             boolean created = currentLogFile.createNewFile();
             if (created) {
                 logger.info("创建新日志文件: {}", currentPath);
                 
-                // 更新AppInfo的logFile字段（保持不变，继续使用同一个文件名）
-                // 不需要更新，因为新文件使用相同的名称
                 logger.info("应用 {} 继续使用日志文件: {}", app.getAppCode(), currentPath);
             } else {
                 logger.warn("创建新日志文件失败: {}", currentPath);
@@ -147,10 +127,6 @@ public class LogRotationService implements CommandLineRunner {
         }
     }
 
-    /**
-     * 生成归档文件名
-     * 格式: baseName.1.log, baseName.2.log, ...
-     */
     private String generateArchivedFileName(String parentDir, String baseName) {
         int index = 1;
         while (true) {
@@ -163,22 +139,5 @@ public class LogRotationService implements CommandLineRunner {
         }
     }
 
-    /**
-     * 停止调度器
-     */
-    public void stopScheduler() {
-        if (scheduler != null && !scheduler.isShutdown()) {
-            scheduler.shutdown();
-            try {
-                if (!scheduler.awaitTermination(10, TimeUnit.SECONDS)) {
-                    scheduler.shutdownNow();
-                }
-                logger.info("日志滚动调度器已停止");
-            } catch (InterruptedException e) {
-                scheduler.shutdownNow();
-                Thread.currentThread().interrupt();
-            }
-        }
-    }
 }
 

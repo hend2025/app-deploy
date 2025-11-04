@@ -7,12 +7,6 @@ spring:
   application:
     name: app-deploy
   
-  web:
-    resources:
-      static-locations: classpath:/static/
-      cache:
-        period: 0
-
 app:
   directory:
     data: /home/data
