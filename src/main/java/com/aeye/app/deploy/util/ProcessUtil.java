@@ -11,22 +11,27 @@ public class ProcessUtil {
      * @return 进程ID，如果未找到返回null
      */
     public static String getJavaProcessId(String appName) {
+        Process process = null;
+        BufferedReader reader = null;
         try {
             String os = System.getProperty("os.name").toLowerCase();
             ProcessBuilder processBuilder;
             
+            // 动态获取系统默认编码
+            String charset = System.getProperty("file.encoding", "UTF-8");
             if (os.contains("win")) {
                 // Windows系统使用wmic命令获取进程ID
                 processBuilder = new ProcessBuilder("wmic", "process", "where", 
                     "name='java.exe'", "get", "processid,commandline");
+                charset = "GBK"; // Windows中文系统使用GBK
             } else {
                 // Linux/Unix系统使用ps命令获取进程ID
                 processBuilder = new ProcessBuilder("ps", "-eo", "pid,cmd");
             }
             
-            Process process = processBuilder.start();
-            BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream(), "GBK"));
+            process = processBuilder.start();
+            reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), charset));
             
             String line;
             while ((line = reader.readLine()) != null) {
@@ -36,19 +41,31 @@ public class ProcessUtil {
                     
                     // 提取进程ID
                     String pid = extractPid(line, os);
-                    reader.close();
-                    process.destroy();
                     return pid;
                 }
             }
             
-            reader.close();
-            process.waitFor();
             return null;
             
         } catch (Exception e) {
             System.err.println("获取进程ID失败: " + e.getMessage());
             return null;
+        } finally {
+            // 确保资源被正确关闭
+            if (reader != null) {
+                try {
+                    reader.close();
+                } catch (Exception e) {
+                    // 忽略关闭异常
+                }
+            }
+            if (process != null) {
+                try {
+                    process.destroy();
+                } catch (Exception e) {
+                    // 忽略销毁异常
+                }
+            }
         }
     }
     

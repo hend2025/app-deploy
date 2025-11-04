@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
@@ -86,8 +87,7 @@ public class LogRotationService implements CommandLineRunner {
 
                 long fileSize = logFile.length();
                 if (fileSize >= maxSizeBytes) {
-                    logger.info("日志文件超过限制: {} ({} MB), 开始滚动", 
-                               logFilePath, fileSize / (1024.0 * 1024.0));
+                    logger.info("日志文件超过限制: {} ({} MB), 开始滚动", logFilePath, fileSize / (1024.0 * 1024.0));
                     rotateLogFile(app, logFile);
                 }
             }
@@ -111,15 +111,12 @@ public class LogRotationService implements CommandLineRunner {
             File archivedFile = new File(parentDir, archivedFileName);
 
             logger.info("归档日志文件: {} -> {}", currentPath, archivedFile.getAbsolutePath());
-            Files.move(currentLogFile.toPath(), archivedFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-
-            boolean created = currentLogFile.createNewFile();
-            if (created) {
-                logger.info("创建新日志文件: {}", currentPath);
-                
-                logger.info("应用 {} 继续使用日志文件: {}", app.getAppCode(), currentPath);
-            } else {
-                logger.warn("创建新日志文件失败: {}", currentPath);
+            
+            Files.copy(currentLogFile.toPath(), archivedFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            
+            try (RandomAccessFile raf = new RandomAccessFile(currentLogFile, "rw")) {
+                raf.setLength(0);
+                logger.info("已清空日志文件: {}", currentPath);
             }
 
         } catch (IOException e) {

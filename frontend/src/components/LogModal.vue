@@ -76,8 +76,14 @@ export default {
       }, 3000)
     }
 
-    // 限制日志行数
+    // 限制日志行数（优化：避免频繁split）
     const limitLogLines = (content, maxLines) => {
+      // 预估：如果内容长度合理，可能不需要限制
+      const estimatedLines = content.length / 100 // 假设平均每行100字符
+      if (estimatedLines <= maxLines * 0.8) {
+        return content // 小于80%限制，直接返回
+      }
+      
       const lines = content.split('\n')
       if (lines.length > maxLines) {
         return lines.slice(-maxLines).join('\n')
@@ -105,7 +111,24 @@ export default {
         } else {
           // 增量加载
           const response = await logFileApi.readFileIncremental(currentLogFile.value, logLineCount.value)
-          if (response.hasNewContent) {
+          
+          // 检测文件是否被轮转
+          if (response.fileRotated) {
+
+            // 重新加载最后2000行
+            const reloadResponse = await logFileApi.readFileLastLines(currentLogFile.value, 2000)
+            logContentText.value += reloadResponse.content
+            
+            // 限制总日志行数，避免内存占用过大
+            logContentText.value = limitLogLines(logContentText.value, 3000)
+            
+            // 重置行计数器为新文件的总行数
+            logLineCount.value = reloadResponse.totalLines
+            
+            // 等待DOM更新后滚动到底部
+            await nextTick()
+            scrollToBottom()
+          } else if (response.hasNewContent) {
             logContentText.value += response.content
             // 限制只保留最新的2000行
             logContentText.value = limitLogLines(logContentText.value, 2000)

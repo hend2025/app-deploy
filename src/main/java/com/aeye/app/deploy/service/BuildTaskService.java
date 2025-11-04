@@ -1,16 +1,24 @@
 package com.aeye.app.deploy.service;
 
 import com.aeye.app.deploy.model.VerInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.PreDestroy;
 import java.io.File;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class BuildTaskService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(BuildTaskService.class);
     
     @Value("${app.directory.logs:/home/logs}")
     private String logsDir;
@@ -18,14 +26,23 @@ public class BuildTaskService {
     private VerMgtService VerMgtService;
 
     private final Map<String, Process> cmdMap = new ConcurrentHashMap<>();
+    
+    // 使用线程池管理构建任务
+    private final ExecutorService executorService = Executors.newCachedThreadPool(r -> {
+        Thread thread = new Thread(r, "build-task-thread");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     /**
      * 启动构建任务
      */
     public void startBuild(VerInfo appVersion, String targetVersion) {
-        Thread buildThread = new Thread(() -> {
+        executorService.submit(() -> {
             Process process = null;
             try {
+                logger.info("开始构建任务: {}, 版本: {}", appVersion.getAppCode(), targetVersion);
+                
                 // 创建日志文件路径：应用名称_版本号_build_时间.log
                 String logFileName = String.format("build_%s_%s_%s.log",
                     appVersion.getAppCode(),
@@ -64,22 +81,26 @@ public class BuildTaskService {
 
                 // 更新任务状态
                 if (exitCode == 0) {
+                    logger.info("构建成功: {}, 版本: {}", appVersion.getAppCode(), targetVersion);
                     VerMgtService.updateStatus(appVersion.getAppCode(),"0",targetVersion);
                 } else {
+                    logger.warn("构建失败: {}, 版本: {}, 退出码: {}", appVersion.getAppCode(), targetVersion, exitCode);
                     VerMgtService.updateStatus(appVersion.getAppCode(),"0",null);
                 }
 
             } catch (Exception e) {
-                e.printStackTrace();
+                logger.error("构建任务异常: {}, 版本: {}", appVersion.getAppCode(), targetVersion, e);
             } finally {
                 cmdMap.remove(appVersion.getAppCode());
                 if (process != null) {
-                    process.destroy();
+                    try {
+                        process.destroy();
+                    } catch (Exception e) {
+                        logger.error("销毁进程失败", e);
+                    }
                 }
             }
         });
-
-        buildThread.start();
 
     }
     
@@ -89,10 +110,51 @@ public class BuildTaskService {
     public boolean stopBuild(String appCode) {
         Process process = cmdMap.get(appCode);
         if (process != null) {
+            logger.info("停止构建任务: {}", appCode);
             cmdMap.remove(appCode);
-            process.destroy();
+            try {
+                process.destroy();
+                return true;
+            } catch (Exception e) {
+                logger.error("停止构建任务失败: {}", appCode, e);
+                return false;
+            }
         }
-        return true;
+        logger.warn("未找到运行中的构建任务: {}", appCode);
+        return false;
+    }
+    
+    /**
+     * 应用关闭时优雅关闭线程池
+     */
+    @PreDestroy
+    public void shutdown() {
+        logger.info("正在关闭BuildTaskService线程池...");
+        
+        // 停止所有正在运行的构建任务
+        for (Map.Entry<String, Process> entry : cmdMap.entrySet()) {
+            try {
+                logger.info("停止构建任务: {}", entry.getKey());
+                entry.getValue().destroy();
+            } catch (Exception e) {
+                logger.error("停止构建任务失败: {}", entry.getKey(), e);
+            }
+        }
+        cmdMap.clear();
+        
+        // 关闭线程池
+        executorService.shutdown();
+        try {
+            if (!executorService.awaitTermination(10, TimeUnit.SECONDS)) {
+                logger.warn("线程池未能在10秒内关闭，强制关闭");
+                executorService.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            logger.error("线程池关闭时被中断", e);
+            executorService.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        logger.info("BuildTaskService线程池已关闭");
     }
 
 }

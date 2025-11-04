@@ -1,10 +1,13 @@
 package com.aeye.app.deploy.service;
 
 import com.aeye.app.deploy.model.AppInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.PreDestroy;
 import java.io.File;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,9 +15,14 @@ import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 @Service
 public class JarProcessService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(JarProcessService.class);
     
     @Value("${app.directory.release:/home/release}")
     private String jarDir;
@@ -28,6 +36,13 @@ public class JarProcessService {
     // 检测操作系统类型
     private static final String OS = System.getProperty("os.name").toLowerCase();
     private static final boolean IS_WINDOWS = OS.contains("win");
+    
+    // 使用线程池管理启动任务
+    private final ExecutorService executorService = Executors.newCachedThreadPool(r -> {
+        Thread thread = new Thread(r, "jar-startup-thread");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     /**
      * 启动jar应用
@@ -49,8 +64,10 @@ public class JarProcessService {
         // 如果目标文件已存在，则替换
         Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
 
-        Thread jarThread = new Thread(() -> {
+        executorService.submit(() -> {
             try {
+                logger.info("开始启动应用: {}, 版本: {}", appCode, version);
+                
                 // 生成日志文件路径：jar包名称_时间.log
                 String baseFileName = appCode+"-"+version;
                 String logFileName = String.format("%s_%s.log", baseFileName,
@@ -138,28 +155,21 @@ public class JarProcessService {
                 processBuilder.redirectInput(ProcessBuilder.Redirect.from(nullDevice));
                 
                 // 启动进程 - 后台运行模式（类似nohup）
-                Process process = processBuilder.start();
+                processBuilder.start();
 
+                // 更新应用信息，不等待进程结束
                 AppInfo appInfo = appMgtService.getAppByCode(appCode);
                 appInfo.setLogFile(logFilePath);
                 appInfo.setParams(params);
                 appInfo.setVersion(version);
                 appMgtService.saveApp(appInfo);
-
-                int result = process.waitFor();
-
-                // 更新任务状态
-                if (result==0) {
-                    appInfo.setVersion(version);
-                    appMgtService.saveApp(appInfo);
-                }
+                
+                logger.info("应用启动命令已执行: {}, 日志文件: {}", appCode, logFilePath);
 
             } catch (Exception e) {
-                e.printStackTrace();
+                logger.error("启动应用失败: {}, 版本: {}", appCode, version, e);
             }
         });
-
-        jarThread.start();
 
     }
     
@@ -180,6 +190,26 @@ public class JarProcessService {
         }
         // 如果找不到完整路径，返回"java"命令，依赖PATH环境变量
         return IS_WINDOWS ? "java.exe" : "java";
+    }
+    
+    /**
+     * 应用关闭时优雅关闭线程池
+     */
+    @PreDestroy
+    public void shutdown() {
+        logger.info("正在关闭JarProcessService线程池...");
+        executorService.shutdown();
+        try {
+            if (!executorService.awaitTermination(10, TimeUnit.SECONDS)) {
+                logger.warn("线程池未能在10秒内关闭，强制关闭");
+                executorService.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            logger.error("线程池关闭时被中断", e);
+            executorService.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+        logger.info("JarProcessService线程池已关闭");
     }
 
 }

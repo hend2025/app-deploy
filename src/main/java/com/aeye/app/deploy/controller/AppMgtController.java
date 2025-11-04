@@ -10,10 +10,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
 @RequestMapping("/appMgt")
@@ -27,6 +25,25 @@ public class AppMgtController {
 
     @Value("${app.directory.logs:/home/logs}")
     private String logsDirectory;
+    
+    // 进程状态缓存，减少系统调用
+    private final Map<String, CachedProcessInfo> processCache = new ConcurrentHashMap<>();
+    private static final long CACHE_EXPIRY_MS = 10000; // 5秒缓存
+    
+    // 缓存进程信息的内部类
+    private static class CachedProcessInfo {
+        String pid;
+        long timestamp;
+        
+        CachedProcessInfo(String pid, long timestamp) {
+            this.pid = pid;
+            this.timestamp = timestamp;
+        }
+        
+        boolean isExpired() {
+            return System.currentTimeMillis() - timestamp > CACHE_EXPIRY_MS;
+        }
+    }
 
     @GetMapping("/list")
     @ResponseBody
@@ -54,8 +71,8 @@ public class AppMgtController {
                 appMap.put("params", appInfo.getParams());
                 appMap.put("logFile", appInfo.getLogFile());
                 
-                // 检查Java进程是否在运行，获取进程ID
-                String pid = ProcessUtil.getJarProcessId(appInfo.getAppCode());
+                // 使用缓存检查Java进程状态
+                String pid = getCachedProcessId(appInfo.getAppCode());
                 
                 if (pid != null) {
                     // 进程正在运行，状态设置为2（运行）
@@ -153,6 +170,11 @@ public class AppMgtController {
             // 停止进程
             boolean success = ProcessUtil.killProcess(pid);
             Thread.sleep(1000);
+            
+            // 清除缓存
+            if (success) {
+                processCache.remove(appCode);
+            }
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", success);
@@ -165,6 +187,31 @@ public class AppMgtController {
             response.put("message", "停止应用失败: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }
+    }
+    
+    /**
+     * 获取缓存的进程ID（带缓存机制）
+     */
+    private String getCachedProcessId(String appCode) {
+        CachedProcessInfo cached = processCache.get(appCode);
+        
+        // 如果缓存存在且未过期，直接返回
+        if (cached != null && !cached.isExpired()) {
+            return cached.pid;
+        }
+        
+        // 缓存不存在或已过期，重新获取
+        String pid = ProcessUtil.getJarProcessId(appCode);
+        
+        // 更新缓存
+        if (pid != null) {
+            processCache.put(appCode, new CachedProcessInfo(pid, System.currentTimeMillis()));
+        } else {
+            // 如果进程不存在，从缓存中移除
+            processCache.remove(appCode);
+        }
+        
+        return pid;
     }
 
 }

@@ -19,7 +19,7 @@ app:
       schedule: "0 0 2 * * ?"
     rotation:
       enabled: true
-      max-size-mb: 10
+      max-size-mb: 50
       check-interval-seconds: 180
 
 

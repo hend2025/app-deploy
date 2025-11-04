@@ -231,15 +231,19 @@ export default {
     })
 
     // 搜索应用
-    const searchApps = async () => {
-      loading.value = true
+    const searchApps = async (showLoading = true) => {
+      if (showLoading) {
+        loading.value = true
+      }
       try {
         const response = await appMgtApi.getAppList(searchText.value)
         appList.value = response.data
       } catch (error) {
         showAlert('搜索失败: ' + error.message, 'danger')
       } finally {
-        loading.value = false
+        if (showLoading) {
+          loading.value = false
+        }
       }
     }
 
@@ -266,7 +270,7 @@ export default {
         
         showAlert(`应用启动成功: ${currentApp.value.appCode}`, 'success')
         startModal.hide()
-        searchApps()
+        searchApps(false)
       } catch (error) {
         showAlert('启动应用失败: ' + error.message, 'danger')
       }
@@ -292,7 +296,7 @@ export default {
         
         showAlert('应用已停止', 'success')
         stopModal.hide()
-        searchApps()
+        searchApps(false)
       } catch (error) {
         showAlert('停止应用失败: ' + error.message, 'danger')
       }
@@ -338,12 +342,12 @@ export default {
     // 启动自动刷新
     const startAutoRefresh = () => {
       autoRefreshInterval = setInterval(() => {
-        searchApps()
+        searchApps(false) 
       }, 15000)
     }
 
     onMounted(() => {
-      searchApps()
+      searchApps() 
       startAutoRefresh()
     })
 

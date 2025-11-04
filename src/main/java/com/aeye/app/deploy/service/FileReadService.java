@@ -359,6 +359,24 @@ public class FileReadService {
             
             int totalLines = lines.length;
             
+            // 检测日志文件是否被轮转（文件行数减少）
+            if (totalLines < fromLine && fromLine > 0) {
+                // 文件被轮转，通知前端重新加载
+                result.put("success", true);
+                result.put("fileName", fileName);
+                result.put("content", "");
+                result.put("totalLines", totalLines);
+                result.put("fromLine", fromLine);
+                result.put("newLines", 0);
+                result.put("hasNewContent", false);
+                result.put("fileRotated", true);
+                result.put("size", file.length());
+                result.put("lastModified", file.lastModified());
+                result.put("configuredDirectory", logsDir);
+                result.put("message", "检测到日志文件已轮转，请重新加载");
+                return result;
+            }
+            
             // 如果文件行数没有增加，返回空内容
             if (totalLines <= fromLine) {
                 result.put("success", true);
@@ -368,6 +386,7 @@ public class FileReadService {
                 result.put("fromLine", fromLine);
                 result.put("newLines", 0);
                 result.put("hasNewContent", false);
+                result.put("fileRotated", false);
                 result.put("size", file.length());
                 result.put("lastModified", file.lastModified());
                 result.put("configuredDirectory", logsDir);
@@ -403,6 +422,7 @@ public class FileReadService {
             result.put("fromLine", fromLine);
             result.put("newLines", newLinesCount);
             result.put("hasNewContent", true);
+            result.put("fileRotated", false);
             result.put("size", file.length());
             result.put("lastModified", file.lastModified());
             result.put("fullPath", file.getAbsolutePath());
