@@ -44,24 +44,6 @@ public class VerMgtService {
         return versionCache.get(id);
     }
 
-    /**
-     * 更新版本信息
-     */
-    public VerInfo updateVersion(String id, VerInfo appVersion) {
-        VerInfo existingVersion = versionCache.get(id);
-        if (existingVersion == null) {
-            return null;
-        }
-        
-        appVersion.setAppCode(id);
-        appVersion.setUpdateTime(new Date());
-        
-        versionCache.put(id, appVersion);
-        saveDataToFile();
-        
-        return appVersion;
-    }
-
     public VerInfo updateStatus(String id,String status,String verNo) {
         VerInfo appVersion = versionCache.get(id);
         if (appVersion == null) {

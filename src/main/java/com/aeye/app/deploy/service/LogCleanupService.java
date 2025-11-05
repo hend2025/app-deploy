@@ -133,42 +133,6 @@ public class LogCleanupService implements CommandLineRunner {
     }
 
     /**
-     * 手动触发日志清理
-     */
-    public void manualCleanup() {
-        logger.info("手动触发日志清理任务");
-        cleanupOldLogs();
-    }
-
-    /**
-     * 获取日志目录信息
-     */
-    public String getLogDirectoryInfo() {
-        try {
-            File logsDirectory = new File(logsDir);
-            if (!logsDirectory.exists()) {
-                return "日志目录不存在: " + logsDir;
-            }
-
-            File[] files = logsDirectory.listFiles((dir, name) -> name.toLowerCase().endsWith(".log"));
-            int fileCount = files != null ? files.length : 0;
-            long totalSize = 0;
-
-            if (files != null) {
-                for (File file : files) {
-                    totalSize += file.length();
-                }
-            }
-
-            return String.format("日志目录: %s, 文件数量: %d, 总大小: %.2f MB", 
-                logsDir, fileCount, totalSize / (1024.0 * 1024.0));
-
-        } catch (Exception e) {
-            return "获取日志目录信息失败: " + e.getMessage();
-        }
-    }
-
-    /**
      * 应用关闭时清理资源
      */
     @PreDestroy

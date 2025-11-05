@@ -542,48 +542,6 @@ public class FileReadService {
             throw new IOException("读取文件最后几行时出错: " + file.getAbsolutePath(), e);
         }
     }
-    
-    /**
-     * 从文件末尾读取最后N行（流式读取，避免内存溢出）
-     * @deprecated 使用 readLastLinesWithCount 替代，以避免重复读取文件
-     */
-    @Deprecated
-    private List<String> readLastLinesFromFile(File file, int lastLines) throws IOException {
-        List<String> lines = new ArrayList<>();
-    
-        // 添加文件存在和可读性检查
-        if (!file.exists() || !file.canRead()) {
-            throw new IOException("文件不存在或无读取权限: " + file.getAbsolutePath());
-        }
-    
-        // 使用 CharsetDecoder 并设置错误处理策略
-        CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
-                .onMalformedInput(CodingErrorAction.REPLACE)
-                .onUnmappableCharacter(CodingErrorAction.REPLACE);
-    
-        // 正确使用 CharsetDecoder 的方法
-        try (ReadableByteChannel channel = Files.newByteChannel(file.toPath());
-             BufferedReader reader = new BufferedReader(Channels.newReader(channel, decoder, -1))) {
-            // 使用队列存储最后N行，避免反向读取的复杂性
-            ArrayDeque<String> lineQueue = new ArrayDeque<>(lastLines);
-            String line;
-    
-            while ((line = reader.readLine()) != null) {
-                lineQueue.offer(line);
-                // 保持队列大小不超过lastLines
-                if (lineQueue.size() > lastLines) {
-                    lineQueue.poll();
-                }
-            }
-    
-            lines.addAll(lineQueue);
-        } catch (Exception e) {
-            // 捕获并包装所有可能的异常，提供更详细的错误信息
-            throw new IOException("读取文件最后几行时出错: " + file.getAbsolutePath(), e);
-        }
-    
-        return lines;
-    }
 
     /**
      * 统计文件总行数（流式读取，避免内存溢出）
