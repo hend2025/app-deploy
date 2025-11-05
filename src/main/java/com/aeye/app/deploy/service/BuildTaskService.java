@@ -38,10 +38,24 @@ public class BuildTaskService {
      * 启动构建任务
      */
     public void startBuild(VerInfo appVersion, String targetVersion) {
+        String appCode = appVersion.getAppCode();
+        
+        // 检查是否已有构建任务在运行
+        if (cmdMap.containsKey(appCode)) {
+            Process existingProcess = cmdMap.get(appCode);
+            if (existingProcess != null && existingProcess.isAlive()) {
+                logger.warn("构建任务已在运行中: {}", appCode);
+                throw new IllegalStateException("该应用的构建任务正在运行中，请先停止后再启动");
+            } else {
+                // 进程已结束但未清理，清理缓存
+                cmdMap.remove(appCode);
+            }
+        }
+        
         executorService.submit(() -> {
             Process process = null;
             try {
-                logger.info("开始构建任务: {}, 版本: {}", appVersion.getAppCode(), targetVersion);
+                logger.info("开始构建任务: {}, 版本: {}", appCode, targetVersion);
                 
                 // 创建日志文件路径：应用名称_版本号_build_时间.log
                 String logFileName = String.format("build_%s_%s_%s.log",
@@ -56,7 +70,7 @@ public class BuildTaskService {
                 if (!logDir.exists()) {
                     logDir.mkdirs();
                 }
-                
+
                 // 执行构建脚本
                 String scriptPath = appVersion.getScript();
                 ProcessBuilder processBuilder = new ProcessBuilder();
@@ -67,32 +81,38 @@ public class BuildTaskService {
                 } else {
                     processBuilder.command(scriptPath, targetVersion);
                 }
-                
+
                 processBuilder.directory(new File(scriptPath).getParentFile());
                 processBuilder.redirectOutput(new File(logFilePath));
                 processBuilder.redirectError(new File(logFilePath));
                 
                 process = processBuilder.start();
 
-                VerMgtService.updateStatus(appVersion.getAppCode(),"1",null);
-                cmdMap.put(appVersion.getAppCode(),process);
+                VerMgtService.updateStatus(appCode, "1", null);
+                cmdMap.put(appCode, process);
 
                 int exitCode = process.waitFor();
 
                 // 更新任务状态
                 if (exitCode == 0) {
-                    logger.info("构建成功: {}, 版本: {}", appVersion.getAppCode(), targetVersion);
-                    VerMgtService.updateStatus(appVersion.getAppCode(),"0",targetVersion);
+                    logger.info("构建成功: {}, 版本: {}", appCode, targetVersion);
+                    VerMgtService.updateStatus(appCode, "0", targetVersion);
                 } else {
-                    logger.warn("构建失败: {}, 版本: {}, 退出码: {}", appVersion.getAppCode(), targetVersion, exitCode);
-                    VerMgtService.updateStatus(appVersion.getAppCode(),"0",null);
+                    logger.warn("构建失败: {}, 版本: {}, 退出码: {}", appCode, targetVersion, exitCode);
+                    VerMgtService.updateStatus(appCode, "0", null);
                 }
 
             } catch (Exception e) {
-                logger.error("构建任务异常: {}, 版本: {}", appVersion.getAppCode(), targetVersion, e);
+                logger.error("构建任务异常: {}, 版本: {}", appCode, targetVersion, e);
+                // 构建异常时也更新状态为失败
+                try {
+                    VerMgtService.updateStatus(appCode, "0", null);
+                } catch (Exception ex) {
+                    logger.error("更新构建状态失败: {}", appCode, ex);
+                }
             } finally {
-                cmdMap.remove(appVersion.getAppCode());
-                if (process != null) {
+                cmdMap.remove(appCode);
+                if (process != null && process.isAlive()) {
                     try {
                         process.destroy();
                     } catch (Exception e) {
@@ -103,34 +123,49 @@ public class BuildTaskService {
         });
 
     }
-    
+
     /**
      * 停止构建任务
      */
     public boolean stopBuild(String appCode) {
         Process process = cmdMap.get(appCode);
-        if (process != null) {
+        if (process != null && process.isAlive()) {
             logger.info("停止构建任务: {}", appCode);
             cmdMap.remove(appCode);
             try {
+                // 先尝试优雅关闭
                 process.destroy();
+                // 等待3秒，如果进程未结束则强制终止
+                boolean terminated = process.waitFor(3, TimeUnit.SECONDS);
+                if (!terminated) {
+                    logger.warn("构建任务未在3秒内结束，强制终止: {}", appCode);
+                    process.destroyForcibly();
+                }
+                // 更新状态为已停止
+                VerMgtService.updateStatus(appCode, "0", null);
                 return true;
             } catch (Exception e) {
                 logger.error("停止构建任务失败: {}", appCode, e);
+                // 即使停止失败也清理缓存
+                cmdMap.remove(appCode);
                 return false;
             }
+        }
+        // 进程不存在或已结束，清理缓存
+        if (process != null) {
+            cmdMap.remove(appCode);
         }
         logger.warn("未找到运行中的构建任务: {}", appCode);
         return false;
     }
-    
+
     /**
      * 应用关闭时优雅关闭线程池
      */
     @PreDestroy
     public void shutdown() {
         logger.info("正在关闭BuildTaskService线程池...");
-        
+
         // 停止所有正在运行的构建任务
         for (Map.Entry<String, Process> entry : cmdMap.entrySet()) {
             try {
@@ -141,7 +176,7 @@ public class BuildTaskService {
             }
         }
         cmdMap.clear();
-        
+
         // 关闭线程池
         executorService.shutdown();
         try {

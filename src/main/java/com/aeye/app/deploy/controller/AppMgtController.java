@@ -5,7 +5,6 @@ import com.aeye.app.deploy.service.AppMgtService;
 import com.aeye.app.deploy.service.JarProcessService;
 import com.aeye.app.deploy.util.ProcessUtil;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,7 +24,7 @@ public class AppMgtController {
 
     // 进程状态缓存，减少系统调用
     private final Map<String, CachedProcessInfo> processCache = new ConcurrentHashMap<>();
-    private static final long CACHE_EXPIRY_MS = 10000; // 5秒缓存
+    private static final long CACHE_EXPIRY_MS = 10000; // 10秒缓存
     
     // 缓存进程信息的内部类
     private static class CachedProcessInfo {
@@ -56,6 +55,9 @@ public class AppMgtController {
                     .collect(java.util.stream.Collectors.toList());
             }
             
+            // 批量获取进程状态，减少系统调用
+            Map<String, String> processStatusMap = batchGetProcessStatus(allApps);
+            
             // 转换为前端需要的格式并检查进程状态
             List<Map<String, Object>> resultList = new ArrayList<>();
             
@@ -68,8 +70,8 @@ public class AppMgtController {
                 appMap.put("params", appInfo.getParams());
                 appMap.put("logFile", appInfo.getLogFile());
                 
-                // 使用缓存检查Java进程状态
-                String pid = getCachedProcessId(appInfo.getAppCode());
+                // 从批量获取的结果中获取进程ID
+                String pid = processStatusMap.get(appInfo.getAppCode());
                 
                 if (pid != null) {
                     // 进程正在运行，状态设置为2（运行）
@@ -187,7 +189,54 @@ public class AppMgtController {
     }
     
     /**
-     * 获取缓存的进程ID（带缓存机制）
+     * 批量获取进程状态，减少系统调用（只调用一次系统命令）
+     */
+    private Map<String, String> batchGetProcessStatus(List<AppInfo> apps) {
+        Map<String, String> result = new HashMap<>();
+        
+        // 检查缓存，找出需要更新的应用
+        List<String> appsToCheck = new ArrayList<>();
+        long currentTime = System.currentTimeMillis();
+        
+        for (AppInfo app : apps) {
+            String appCode = app.getAppCode();
+            CachedProcessInfo cached = processCache.get(appCode);
+            
+            // 如果缓存存在且未过期，直接使用缓存
+            if (cached != null && !cached.isExpired()) {
+                if (cached.pid != null) {
+                    result.put(appCode, cached.pid);
+                }
+            } else {
+                // 需要检查的应用
+                appsToCheck.add(appCode);
+            }
+        }
+        
+        // 如果有需要检查的应用，批量获取进程信息
+        if (!appsToCheck.isEmpty()) {
+            // 一次性获取所有Java进程信息
+            Map<String, String> allProcesses = ProcessUtil.getAllJarProcessIds();
+            
+            // 更新缓存和结果
+            for (String appCode : appsToCheck) {
+                String pid = allProcesses.get(appCode);
+                
+                if (pid != null) {
+                    result.put(appCode, pid);
+                    processCache.put(appCode, new CachedProcessInfo(pid, currentTime));
+                } else {
+                    // 进程不存在，从缓存中移除
+                    processCache.remove(appCode);
+                }
+            }
+        }
+        
+        return result;
+    }
+    
+    /**
+     * 获取缓存的进程ID（带缓存机制）- 单个应用使用
      */
     private String getCachedProcessId(String appCode) {
         CachedProcessInfo cached = processCache.get(appCode);

@@ -18,7 +18,7 @@ app:
       retention-days: 7
     rotation:
       enabled: true
-      max-size-mb: 30
-      check-interval-seconds: 180
+      max-size-mb: 0.1
+      check-interval-seconds: 10
 
 

@@ -36,7 +36,7 @@
 </template>
 
 <script>
-import { ref, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { Modal } from 'bootstrap'
 import { logFileApi } from '../api'
 import { showAlert } from '../utils/alert'
@@ -189,20 +189,30 @@ export default {
       }
     }
 
-    // 监听模态框关闭事件
-    if (modalElement.value) {
-      modalElement.value.addEventListener('hidden.bs.modal', () => {
-        if (autoRefreshInterval) {
-          clearInterval(autoRefreshInterval)
-          autoRefreshInterval = null
-        }
-        autoRefreshEnabled.value = false
-      })
-    }
+    // 在组件挂载后设置模态框关闭事件监听
+    onMounted(() => {
+      if (modalElement.value) {
+        modalElement.value.addEventListener('hidden.bs.modal', () => {
+          if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval)
+            autoRefreshInterval = null
+          }
+          autoRefreshEnabled.value = false
+          // 清理日志内容
+          logContentText.value = ''
+          logLineCount.value = 0
+        })
+      }
+    })
 
     onUnmounted(() => {
       if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval)
+      }
+      // 清理事件监听器
+      if (modalElement.value) {
+        const clonedElement = modalElement.value.cloneNode(true)
+        modalElement.value.parentNode?.replaceChild(clonedElement, modalElement.value)
       }
     })
 

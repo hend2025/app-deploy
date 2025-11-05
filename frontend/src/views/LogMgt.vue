@@ -68,15 +68,15 @@
         v-else
         ref="logContent"
         class="log-content-area"
+        v-html="formattedLogContent"
       >
-        {{ logContentText }}
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { logFileApi } from '../api'
 import { showAlert } from '../utils/alert'
 
@@ -92,6 +92,42 @@ export default {
     const logContent = ref(null)
     
     let autoRefreshInterval = null
+    
+    // 格式化日志内容，限制显示行数以提高性能
+    const formattedLogContent = computed(() => {
+      if (!logContentText.value) return ''
+      
+      // 限制最大显示行数，避免DOM过大导致性能问题
+      const maxDisplayLines = 30000
+      const lines = logContentText.value.split('\n')
+      
+      if (lines.length > maxDisplayLines) {
+        // 只显示最后maxDisplayLines行
+        const displayLines = lines.slice(-maxDisplayLines)
+        // 转义HTML特殊字符并添加行号
+        return displayLines.map((line, index) => {
+          const lineNum = lines.length - maxDisplayLines + index + 1
+          const escapedLine = line
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+          return `<div class="log-line">${escapedLine}</div>`
+        }).join('')
+      } else {
+        // 转义HTML特殊字符
+        return lines.map(line => {
+          const escapedLine = line
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+          return `<div class="log-line">${escapedLine}</div>`
+        }).join('')
+      }
+    })
 
     // 获取文件列表
     const loadFileList = async () => {
@@ -269,6 +305,7 @@ export default {
       selectedFile,
       maxLines,
       logContentText,
+      formattedLogContent,
       autoRefreshEnabled,
       logContent,
       onFileChange,
@@ -326,10 +363,14 @@ export default {
   border: 1px solid #dee2e6;
   border-radius: 4px;
   font-family: monospace;
-  white-space: pre-wrap;
   font-size: 14px;
   line-height: 1.4;
   word-break: break-all;
+}
+
+.log-content-area .log-line {
+  white-space: pre-wrap;
+  min-height: 1.4em;
 }
 </style>
 
