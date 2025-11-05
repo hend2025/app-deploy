@@ -277,14 +277,13 @@ export default {
       }
     }
 
-    // 滚动到底部（只在用户处于底部附近或首次加载时）
+    // 滚动到底部（自动刷新时始终滚动到底部）
     const scrollToBottom = () => {
       if (logContent.value) {
-        // 如果用户在底部附近（允许100px误差）或者是首次加载，则自动滚动到底部
-        const isNearBottom = logContent.value.scrollHeight - logContent.value.scrollTop - logContent.value.clientHeight < 100
-        if (isNearBottom || logLineCount.value === 0) {
-          logContent.value.scrollTop = logContent.value.scrollHeight
-        }
+        // 使用 nextTick 确保 DOM 已更新
+        nextTick(() => {
+            logContent.value.scrollTop = logContent.value.scrollHeight
+        })
       }
     }
 

@@ -211,7 +211,7 @@ export default {
         
         showAlert('构建任务已启动', 'success')
         buildModal.hide()
-        searchVersions()
+        setTimeout(() => { searchVersions() }, 1000)
       } catch (error) {
         showAlert('启动构建失败: ' + error.message, 'danger')
       }
@@ -262,12 +262,12 @@ export default {
         if (!hasModalOpen()) {
           searchVersions()
         }
-      }, 10000)
+      }, 3000)
     }
 
     onMounted(() => {
       searchVersions()
-      startAutoRefresh()
+      // startAutoRefresh()
     })
 
     onUnmounted(() => {

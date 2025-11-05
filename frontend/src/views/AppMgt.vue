@@ -270,7 +270,7 @@ export default {
         
         showAlert(`应用启动成功: ${currentApp.value.appCode}`, 'success')
         startModal.hide()
-        searchApps(false)
+        setTimeout(() => {  searchApps(false) }, 1000)
       } catch (error) {
         showAlert('启动应用失败: ' + error.message, 'danger')
       }
@@ -357,7 +357,7 @@ export default {
 
     onMounted(() => {
       searchApps() 
-      startAutoRefresh()
+      // startAutoRefresh()
     })
 
     onUnmounted(() => {
