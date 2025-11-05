@@ -4,7 +4,7 @@ import { resolve } from 'path'
 
 export default defineConfig({
   plugins: [vue()],
-  base: '/deploy/',
+  base: '/deploy',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
@@ -19,7 +19,7 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/deploy': {
-        target: 'http://localhost:8080',
+        target: 'http://127.0.0.1:7080',
         changeOrigin: true
       }
     }

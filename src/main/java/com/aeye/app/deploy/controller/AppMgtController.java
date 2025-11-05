@@ -235,30 +235,4 @@ public class AppMgtController {
         return result;
     }
     
-    /**
-     * 获取缓存的进程ID（带缓存机制）
-     * 注意：此方法目前未被使用，保留以备将来需要单个应用查询时使用
-     */
-    private String getCachedProcessId(String appCode) {
-        CachedProcessInfo cached = processCache.get(appCode);
-        
-        // 如果缓存存在且未过期，直接返回
-        if (cached != null && !cached.isExpired()) {
-            return cached.pid;
-        }
-        
-        // 缓存不存在或已过期，重新获取
-        String pid = ProcessUtil.getJarProcessId(appCode);
-        
-        // 更新缓存
-        if (pid != null) {
-            processCache.put(appCode, new CachedProcessInfo(pid, System.currentTimeMillis()));
-        } else {
-            // 如果进程不存在，从缓存中移除
-            processCache.remove(appCode);
-        }
-        
-        return pid;
-    }
-
 }
