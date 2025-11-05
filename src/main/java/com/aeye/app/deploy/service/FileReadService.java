@@ -188,7 +188,7 @@ public class FileReadService {
     }
     
     /**
-     * 读取指定文件（流式读取，避免大文件OOM）
+     * 读取指定文件
      */
     public Map<String, Object> readFile(String fileName) {
         Map<String, Object> result = new HashMap<>();
@@ -348,7 +348,6 @@ public class FileReadService {
     
     /**
      * 增量读取文件内容（从指定行数开始读取新增内容）
-     * 在读取过程中同时计算总行数，避免单独调用countFileLines方法
      */
     public Map<String, Object> readFileIncremental(String fileName, int fromLine) {
         Map<String, Object> result = new HashMap<>();
@@ -383,7 +382,6 @@ public class FileReadService {
             int maxIncrementalLines = 2000;
             
             // 使用流式读取，从指定行开始读取新增部分
-            // 在读取过程中同时计算总行数，避免单独调用countFileLines方法
             List<String> newLinesList = new ArrayList<>();
             CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
                     .onMalformedInput(CodingErrorAction.REPLACE)
@@ -520,39 +518,7 @@ public class FileReadService {
     
         return lines;
     }
-    
-    
-    /**
-     * 从文件指定行范围读取内容（流式读取）
-     */
-    private List<String> readLinesFromFile(File file, int fromLine, int toLine) throws IOException {
-        List<String> lines = new ArrayList<>();
-        
-        // 使用 CharsetDecoder 并设置错误处理策略
-        CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
-                .onMalformedInput(CodingErrorAction.REPLACE)
-                .onUnmappableCharacter(CodingErrorAction.REPLACE);
-        
-        // 正确使用 CharsetDecoder 的方法
-        try (ReadableByteChannel channel = Files.newByteChannel(file.toPath());
-             BufferedReader reader = new BufferedReader(Channels.newReader(channel, decoder, -1))) {
-            String line;
-            int currentLine = 0;
-            
-            while ((line = reader.readLine()) != null) {
-                if (currentLine >= fromLine && currentLine < toLine) {
-                    lines.add(line);
-                }
-                if (currentLine >= toLine) {
-                    break;
-                }
-                currentLine++;
-            }
-        }
-        
-        return lines;
-    }
-    
+
     /**
      * 统计文件总行数（流式读取，避免内存溢出）
      */

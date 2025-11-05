@@ -6,99 +6,6 @@ import java.io.InputStreamReader;
 public class ProcessUtil {
     
     /**
-     * 获取指定名称的Java进程ID
-     * @param appName 应用名称（jar文件名）
-     * @return 进程ID，如果未找到返回null
-     */
-    public static String getJavaProcessId(String appName) {
-        Process process = null;
-        BufferedReader reader = null;
-        try {
-            String os = System.getProperty("os.name").toLowerCase();
-            ProcessBuilder processBuilder;
-            
-            // 动态获取系统默认编码
-            String charset = System.getProperty("file.encoding", "UTF-8");
-            if (os.contains("win")) {
-                // Windows系统使用wmic命令获取进程ID
-                processBuilder = new ProcessBuilder("wmic", "process", "where", 
-                    "name='java.exe'", "get", "processid,commandline");
-                charset = "GBK"; // Windows中文系统使用GBK
-            } else {
-                // Linux/Unix系统使用ps命令获取进程ID
-                processBuilder = new ProcessBuilder("ps", "-eo", "pid,cmd");
-            }
-            
-            process = processBuilder.start();
-            reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream(), charset));
-            
-            String line;
-            while ((line = reader.readLine()) != null) {
-                // 检查命令行中是否包含应用名称
-                if (line.toLowerCase().contains(appName.toLowerCase()) && 
-                    line.toLowerCase().contains("java")) {
-                    
-                    // 提取进程ID
-                    String pid = extractPid(line, os);
-                    return pid;
-                }
-            }
-            
-            return null;
-            
-        } catch (Exception e) {
-            System.err.println("获取进程ID失败: " + e.getMessage());
-            return null;
-        } finally {
-            // 确保资源被正确关闭
-            if (reader != null) {
-                try {
-                    reader.close();
-                } catch (Exception e) {
-                    // 忽略关闭异常
-                }
-            }
-            if (process != null) {
-                try {
-                    process.destroy();
-                } catch (Exception e) {
-                    // 忽略销毁异常
-                }
-            }
-        }
-    }
-    
-    /**
-     * 从命令行输出中提取进程ID
-     */
-    private static String extractPid(String line, String os) {
-        try {
-            if (os.contains("win")) {
-                // Windows: 输出格式为 "CommandLine  ProcessId"
-                String[] parts = line.trim().split("\\s+");
-                // 最后一个字段是ProcessId
-                return parts[parts.length - 1];
-            } else {
-                // Linux: 输出格式为 "PID CMD"
-                String[] parts = line.trim().split("\\s+", 2);
-                return parts[0];
-            }
-        } catch (Exception e) {
-            return null;
-        }
-    }
-    
-    /**
-     * 获取指定jar文件的Java进程ID
-     * @param jarFileName jar文件名
-     * @return 进程ID，如果未找到返回null
-     */
-    public static String getJarProcessId(String jarFileName) {
-        return getJavaProcessId(jarFileName);
-    }
-    
-    /**
      * 批量获取所有Java进程ID（按应用名称映射）
      * @return Map<应用名称, 进程ID>，如果未找到返回空Map
      */
@@ -211,7 +118,27 @@ public class ProcessUtil {
             return null;
         }
     }
-    
+
+    /**
+     * 从命令行输出中提取进程ID
+     */
+    private static String extractPid(String line, String os) {
+        try {
+            if (os.contains("win")) {
+                // Windows: 输出格式为 "CommandLine  ProcessId"
+                String[] parts = line.trim().split("\\s+");
+                // 最后一个字段是ProcessId
+                return parts[parts.length - 1];
+            } else {
+                // Linux: 输出格式为 "PID CMD"
+                String[] parts = line.trim().split("\\s+", 2);
+                return parts[0];
+            }
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /**
      * 停止指定进程ID的进程
      * @param pid 进程ID
