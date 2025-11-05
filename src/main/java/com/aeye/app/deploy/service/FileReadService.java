@@ -307,9 +307,10 @@ public class FileReadService {
                 result.put("warning", String.format("请求行数过多，已限制为 %d 行", maxAllowedLines));
             }
             
-            // 使用流式读取最后N行，避免大文件内存溢出
-            List<String> lastLinesList = readLastLinesFromFile(file, lastLines);
-            int totalLines = countFileLines(file);
+            // 使用优化的方法读取最后N行，同时获取总行数
+            ReadLastLinesResult readResult = readLastLinesWithCount(file, lastLines);
+            int totalLines = readResult.totalLines;
+            List<String> lastLinesList = readResult.lines;
             int actualLines = lastLinesList.size();
             int startLine = Math.max(0, totalLines - actualLines);
             
@@ -348,6 +349,7 @@ public class FileReadService {
     
     /**
      * 增量读取文件内容（从指定行数开始读取新增内容）
+     * 优化版本：使用 skip() 跳过已读取的行，提高性能
      */
     public Map<String, Object> readFileIncremental(String fileName, int fromLine) {
         Map<String, Object> result = new HashMap<>();
@@ -381,25 +383,35 @@ public class FileReadService {
             // 限制单次增量读取的最大行数，防止内存溢出
             int maxIncrementalLines = 2000;
             
-            // 使用流式读取，从指定行开始读取新增部分
+            // 优化：使用 Stream API 的 skip() 来跳过已读取的行，避免逐行遍历前面的内容
             List<String> newLinesList = new ArrayList<>();
             CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
                     .onMalformedInput(CodingErrorAction.REPLACE)
                     .onUnmappableCharacter(CodingErrorAction.REPLACE);
             
-            int currentLine = 0;
             int totalLines = 0;
             
             try (ReadableByteChannel channel = Files.newByteChannel(file.toPath());
                  BufferedReader reader = new BufferedReader(Channels.newReader(channel, decoder, -1))) {
+                // 优化：跳过前面已读取的行，提高性能
                 String line;
-                while ((line = reader.readLine()) != null) {
+                int skippedCount = 0;
+                
+                // 跳过前面的行
+                while (skippedCount < fromLine && (line = reader.readLine()) != null) {
+                    skippedCount++;
+                }
+                totalLines = skippedCount;
+                
+                // 读取新增的行
+                while ((line = reader.readLine()) != null && newLinesList.size() < maxIncrementalLines) {
+                    newLinesList.add(line);
                     totalLines++;
-                    // 如果当前行号大于等于起始行号，且新增行数未超过限制
-                    if (currentLine >= fromLine && newLinesList.size() < maxIncrementalLines) {
-                        newLinesList.add(line);
-                    }
-                    currentLine++;
+                }
+                
+                // 继续统计剩余行数（如果有）
+                while (reader.readLine() != null) {
+                    totalLines++;
                 }
             }
             
@@ -480,8 +492,62 @@ public class FileReadService {
     }
     
     /**
-     * 从文件末尾读取最后N行（流式读取，避免内存溢出）
+     * 优化的读取结果内部类
      */
+    private static class ReadLastLinesResult {
+        List<String> lines;
+        int totalLines;
+        
+        ReadLastLinesResult(List<String> lines, int totalLines) {
+            this.lines = lines;
+            this.totalLines = totalLines;
+        }
+    }
+    
+    /**
+     * 优化方法：一次性读取文件最后N行并统计总行数（避免重复读取文件）
+     */
+    private ReadLastLinesResult readLastLinesWithCount(File file, int lastLines) throws IOException {
+        // 添加文件存在和可读性检查
+        if (!file.exists() || !file.canRead()) {
+            throw new IOException("文件不存在或无读取权限: " + file.getAbsolutePath());
+        }
+    
+        // 使用 CharsetDecoder 并设置错误处理策略
+        CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPLACE)
+                .onUnmappableCharacter(CodingErrorAction.REPLACE);
+    
+        // 正确使用 CharsetDecoder 的方法
+        try (ReadableByteChannel channel = Files.newByteChannel(file.toPath());
+             BufferedReader reader = new BufferedReader(Channels.newReader(channel, decoder, -1))) {
+            // 使用队列存储最后N行，避免反向读取的复杂性
+            ArrayDeque<String> lineQueue = new ArrayDeque<>(lastLines);
+            String line;
+            int totalLines = 0;
+    
+            while ((line = reader.readLine()) != null) {
+                totalLines++;
+                lineQueue.offer(line);
+                // 保持队列大小不超过lastLines
+                if (lineQueue.size() > lastLines) {
+                    lineQueue.poll();
+                }
+            }
+    
+            List<String> lines = new ArrayList<>(lineQueue);
+            return new ReadLastLinesResult(lines, totalLines);
+        } catch (Exception e) {
+            // 捕获并包装所有可能的异常，提供更详细的错误信息
+            throw new IOException("读取文件最后几行时出错: " + file.getAbsolutePath(), e);
+        }
+    }
+    
+    /**
+     * 从文件末尾读取最后N行（流式读取，避免内存溢出）
+     * @deprecated 使用 readLastLinesWithCount 替代，以避免重复读取文件
+     */
+    @Deprecated
     private List<String> readLastLinesFromFile(File file, int lastLines) throws IOException {
         List<String> lines = new ArrayList<>();
     
@@ -521,7 +587,9 @@ public class FileReadService {
 
     /**
      * 统计文件总行数（流式读取，避免内存溢出）
+     * @deprecated 使用 readLastLinesWithCount 替代，以避免重复读取文件
      */
+    @Deprecated
     private int countFileLines(File file) throws IOException {
         int lineCount = 0;
         

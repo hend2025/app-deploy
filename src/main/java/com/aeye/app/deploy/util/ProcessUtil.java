@@ -149,6 +149,7 @@ public class ProcessUtil {
             return false;
         }
         
+        Process process = null;
         try {
             String os = System.getProperty("os.name").toLowerCase();
             ProcessBuilder processBuilder;
@@ -161,13 +162,22 @@ public class ProcessUtil {
                 processBuilder = new ProcessBuilder("kill", "-9", pid);
             }
             
-            Process process = processBuilder.start();
+            process = processBuilder.start();
             int exitCode = process.waitFor();
             return exitCode == 0;
             
         } catch (Exception e) {
             System.err.println("停止进程失败: " + e.getMessage());
             return false;
+        } finally {
+            // 确保进程资源被正确释放
+            if (process != null) {
+                try {
+                    process.destroy();
+                } catch (Exception e) {
+                    // 忽略销毁异常
+                }
+            }
         }
     }
 

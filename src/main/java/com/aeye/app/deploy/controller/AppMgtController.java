@@ -168,12 +168,9 @@ public class AppMgtController {
 
             // 停止进程
             boolean success = ProcessUtil.killProcess(pid);
-            Thread.sleep(1000);
             
-            // 清除缓存
-            if (success) {
-                processCache.remove(appCode);
-            }
+            // 清除缓存，让下次查询时重新获取进程状态
+            processCache.remove(appCode);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", success);

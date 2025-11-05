@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Service;
 
+import javax.annotation.PreDestroy;
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
@@ -145,6 +146,28 @@ public class LogRotationService implements CommandLineRunner {
                 return candidateName;
             }
             index++;
+        }
+    }
+
+    /**
+     * 应用关闭时清理资源
+     */
+    @PreDestroy
+    public void shutdown() {
+        if (scheduler != null && !scheduler.isShutdown()) {
+            logger.info("正在关闭日志轮转调度器...");
+            scheduler.shutdown();
+            try {
+                if (!scheduler.awaitTermination(5, TimeUnit.SECONDS)) {
+                    logger.warn("日志轮转调度器未能在5秒内关闭，强制关闭");
+                    scheduler.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                logger.error("日志轮转调度器关闭时被中断", e);
+                scheduler.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+            logger.info("日志轮转调度器已关闭");
         }
     }
 

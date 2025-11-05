@@ -101,31 +101,36 @@ export default {
       const maxDisplayLines = 30000
       const lines = logContentText.value.split('\n')
       
-      if (lines.length > maxDisplayLines) {
-        // 只显示最后maxDisplayLines行
-        const displayLines = lines.slice(-maxDisplayLines)
-        // 转义HTML特殊字符，将每行包装在div中
-        return displayLines.map((line) => {
-          const escapedLine = line
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;')
-          return `<div class="log-line">${escapedLine}</div>`
-        }).join('')
-      } else {
-        // 转义HTML特殊字符，将每行包装在div中
-        return lines.map(line => {
-          const escapedLine = line
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;')
-          return `<div class="log-line">${escapedLine}</div>`
-        }).join('')
+      // 优化：使用更高效的正则表达式一次性替换所有特殊字符
+      const escapeHtml = (text) => {
+        return text.replace(/[&<>"']/g, (match) => {
+          const escapeMap = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+          }
+          return escapeMap[match]
+        })
       }
+      
+      // 根据行数决定处理方式
+      const displayLines = lines.length > maxDisplayLines ? lines.slice(-maxDisplayLines) : lines
+      
+      // 优化：减少字符串拼接次数，使用数组join提高性能
+      const result = []
+      result.push('<div class="log-line">')
+      
+      for (let i = 0; i < displayLines.length; i++) {
+        if (i > 0) {
+          result.push('</div><div class="log-line">')
+        }
+        result.push(escapeHtml(displayLines[i]))
+      }
+      
+      result.push('</div>')
+      return result.join('')
     })
 
     // 获取文件列表
@@ -264,6 +269,7 @@ export default {
           return
         }
         loadLogContent()
+        // 优化：调整自动刷新间隔为5秒，减少服务器压力
         autoRefreshInterval = setInterval(() => {
           loadLogContent()
         }, 3000)

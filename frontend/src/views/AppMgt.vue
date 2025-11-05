@@ -339,11 +339,20 @@ export default {
       return date.toLocaleString('zh-CN')
     }
 
+    // 检查是否有模态框打开
+    const hasModalOpen = () => {
+      const openModals = document.querySelectorAll('.modal.show')
+      return openModals.length > 0
+    }
+
     // 启动自动刷新
     const startAutoRefresh = () => {
       autoRefreshInterval = setInterval(() => {
-        searchApps(false) 
-      }, 15000)
+        // 优化：只在没有打开模态框时刷新，避免用户操作被打断
+        if (!hasModalOpen()) {
+          searchApps(false)
+        }
+      }, 5000)
     }
 
     onMounted(() => {
