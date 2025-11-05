@@ -15,11 +15,10 @@ app:
   log:
     cleanup:
       enabled: true
-      retention-days: 10
-      schedule: "0 0 2 * * ?"
+      retention-days: 7
     rotation:
       enabled: true
-      max-size-mb: 50
+      max-size-mb: 30
       check-interval-seconds: 180
 
 

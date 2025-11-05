@@ -26,9 +26,6 @@ public class LogCleanupService implements CommandLineRunner {
     @Value("${app.log.cleanup.retention-days:7}")
     private int retentionDays;
 
-    @Value("${app.log.cleanup.schedule:0 0 2 * * ?}")
-    private String schedule;
-
     private ScheduledExecutorService scheduler;
 
     @Override

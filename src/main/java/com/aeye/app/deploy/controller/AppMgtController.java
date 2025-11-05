@@ -23,9 +23,6 @@ public class AppMgtController {
     @Autowired
     private JarProcessService jarProcessService;
 
-    @Value("${app.directory.logs:/home/logs}")
-    private String logsDirectory;
-    
     // 进程状态缓存，减少系统调用
     private final Map<String, CachedProcessInfo> processCache = new ConcurrentHashMap<>();
     private static final long CACHE_EXPIRY_MS = 10000; // 5秒缓存

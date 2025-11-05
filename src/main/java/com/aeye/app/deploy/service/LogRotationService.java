@@ -13,10 +13,14 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class LogRotationService implements CommandLineRunner {
@@ -27,7 +31,7 @@ public class LogRotationService implements CommandLineRunner {
     private boolean rotationEnabled;
 
     @Value("${app.log.rotation.max-size-mb:10}")
-    private int maxSizeMb;
+    double maxSizeMb;
 
     @Value("${app.log.rotation.check-interval-seconds:60}")
     private int checkIntervalSeconds;
@@ -72,7 +76,7 @@ public class LogRotationService implements CommandLineRunner {
                 return;
             }
 
-            long maxSizeBytes = maxSizeMb * 1024L * 1024L;
+            double maxSizeBytes = maxSizeMb * 1024L * 1024L;
 
             for (AppInfo app : apps) {
                 String logFilePath = app.getLogFile();
@@ -88,7 +92,7 @@ public class LogRotationService implements CommandLineRunner {
                 long fileSize = logFile.length();
                 if (fileSize >= maxSizeBytes) {
                     logger.info("日志文件超过限制: {} ({} MB), 开始滚动", logFilePath, fileSize / (1024.0 * 1024.0));
-                    rotateLogFile(app, logFile);
+                    rotateLogFile(logFile);
                 }
             }
         } catch (Exception e) {
@@ -96,18 +100,26 @@ public class LogRotationService implements CommandLineRunner {
         }
     }
 
-    private void rotateLogFile(AppInfo app, File currentLogFile) {
+    private void rotateLogFile(File currentLogFile) {
         try {
             String currentPath = currentLogFile.getAbsolutePath();
             String parentDir = currentLogFile.getParent();
             String fileName = currentLogFile.getName();
 
-            String baseName = fileName;
-            if (fileName.endsWith(".log")) {
-                baseName = fileName.substring(0, fileName.length() - 4);
+            Pattern pattern = Pattern.compile("(.*_)(\\d{8})_(\\d{6})\\.log");
+            Matcher matcher = pattern.matcher(fileName);
+            String archivedFileName;
+            if (matcher.find()) {
+                String baseName = matcher.group(1);
+                archivedFileName = String.format("%s%s.log", baseName, new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()));
+            } else {
+                String baseName = fileName;
+                if (fileName.endsWith(".log")) {
+                    baseName = fileName.substring(0, fileName.length() - 4);
+                }
+                archivedFileName = generateArchivedFileName(parentDir, baseName);
             }
 
-            String archivedFileName = generateArchivedFileName(parentDir, baseName);
             File archivedFile = new File(parentDir, archivedFileName);
 
             logger.info("归档日志文件: {} -> {}", currentPath, archivedFile.getAbsolutePath());
