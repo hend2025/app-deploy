@@ -76,14 +76,15 @@ export default {
       }, 3000)
     }
 
-    // 限制日志行数（优化：避免频繁split）
+    // 限制日志行数，保留最新的指定行数
     const limitLogLines = (content, maxLines) => {
-      // 预估：如果内容长度合理，可能不需要限制
+      // 预估行数，如果明显小于限制，直接返回，避免不必要的split操作
       const estimatedLines = content.length / 100 // 假设平均每行100字符
       if (estimatedLines <= maxLines * 0.8) {
-        return content // 小于80%限制，直接返回
+        return content
       }
       
+      // 实际检查行数，如果超过限制则只保留最后N行
       const lines = content.split('\n')
       if (lines.length > maxLines) {
         return lines.slice(-maxLines).join('\n')
@@ -170,10 +171,15 @@ export default {
       }
     }
 
-    // 滚动到底部
+    // 滚动到底部（只在用户未手动滚动时）
     const scrollToBottom = () => {
       if (logContent.value) {
-        logContent.value.scrollTop = logContent.value.scrollHeight
+        // 检查用户是否在底部附近（允许100px误差）
+        const isNearBottom = logContent.value.scrollHeight - logContent.value.scrollTop - logContent.value.clientHeight < 100
+        // 如果是首次加载或者在底部附近，则自动滚动
+        if (isNearBottom || logLineCount.value === 0) {
+          logContent.value.scrollTop = logContent.value.scrollHeight
+        }
       }
     }
 

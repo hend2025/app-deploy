@@ -19,7 +19,7 @@
             <option value="2000">2000</option>
             <option value="5000">5000</option>
             <option value="10000">10000</option>
-            <option value="20000">30000</option>
+            <option value="30000">30000</option>
           </select>
           <button 
             class="btn me-2"
@@ -104,9 +104,8 @@ export default {
       if (lines.length > maxDisplayLines) {
         // 只显示最后maxDisplayLines行
         const displayLines = lines.slice(-maxDisplayLines)
-        // 转义HTML特殊字符并添加行号
-        return displayLines.map((line, index) => {
-          const lineNum = lines.length - maxDisplayLines + index + 1
+        // 转义HTML特殊字符，将每行包装在div中
+        return displayLines.map((line) => {
           const escapedLine = line
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
@@ -116,7 +115,7 @@ export default {
           return `<div class="log-line">${escapedLine}</div>`
         }).join('')
       } else {
-        // 转义HTML特殊字符
+        // 转义HTML特殊字符，将每行包装在div中
         return lines.map(line => {
           const escapedLine = line
             .replace(/&/g, '&amp;')
@@ -161,14 +160,15 @@ export default {
       }
     }
 
-    // 限制日志行数（优化：避免频繁split）
+    // 限制日志行数，保留最新的指定行数
     const limitLogLines = (content, maxLines) => {
-      // 预估：如果内容长度合理，可能不需要限制
+      // 预估行数，如果明显小于限制，直接返回，避免不必要的split操作
       const estimatedLines = content.length / 100 // 假设平均每行100字符
       if (estimatedLines <= maxLines * 0.8) {
-        return content // 小于80%限制，直接返回
+        return content
       }
       
+      // 实际检查行数，如果超过限制则只保留最后N行
       const lines = content.split('\n')
       if (lines.length > maxLines) {
         return lines.slice(-maxLines).join('\n')
@@ -271,10 +271,14 @@ export default {
       }
     }
 
-    // 滚动到底部
+    // 滚动到底部（只在用户处于底部附近或首次加载时）
     const scrollToBottom = () => {
       if (logContent.value) {
-        logContent.value.scrollTop = logContent.value.scrollHeight
+        // 如果用户在底部附近（允许100px误差）或者是首次加载，则自动滚动到底部
+        const isNearBottom = logContent.value.scrollHeight - logContent.value.scrollTop - logContent.value.clientHeight < 100
+        if (isNearBottom || logLineCount.value === 0) {
+          logContent.value.scrollTop = logContent.value.scrollHeight
+        }
       }
     }
 

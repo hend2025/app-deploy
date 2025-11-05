@@ -188,7 +188,7 @@ public class FileReadService {
     }
     
     /**
-     * 读取指定文件
+     * 读取指定文件（流式读取，避免大文件OOM）
      */
     public Map<String, Object> readFile(String fileName) {
         Map<String, Object> result = new HashMap<>();
@@ -218,12 +218,34 @@ public class FileReadService {
                 return result;
             }
             
-            // 读取文件内容
-            String content = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+            // 检查文件大小，如果超过100MB，建议使用下载
+            long fileSize = file.length();
+            long fileSizeMB = fileSize / (1024 * 1024);
+            if (fileSizeMB > 100) {
+                result.put("success", false);
+                result.put("message", "文件过大 (" + fileSizeMB + " MB)，请使用下载功能");
+                result.put("size", fileSize);
+                result.put("configuredDirectory", logsDir);
+                return result;
+            }
+            
+            // 使用流式读取，避免大文件内存溢出
+            StringBuilder content = new StringBuilder();
+            CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPLACE)
+                    .onUnmappableCharacter(CodingErrorAction.REPLACE);
+            
+            try (ReadableByteChannel channel = Files.newByteChannel(file.toPath());
+                 BufferedReader reader = new BufferedReader(Channels.newReader(channel, decoder, -1))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    content.append(line).append("\n");
+                }
+            }
             
             result.put("success", true);
             result.put("fileName", fileName);
-            result.put("content", content);
+            result.put("content", content.toString());
             result.put("size", file.length());
             result.put("lastModified", file.lastModified());
             result.put("fullPath", file.getAbsolutePath());
@@ -326,6 +348,7 @@ public class FileReadService {
     
     /**
      * 增量读取文件内容（从指定行数开始读取新增内容）
+     * 在读取过程中同时计算总行数，避免单独调用countFileLines方法
      */
     public Map<String, Object> readFileIncremental(String fileName, int fromLine) {
         Map<String, Object> result = new HashMap<>();
@@ -356,12 +379,34 @@ public class FileReadService {
                 return result;
             }
             
-            // 使用流式读取，避免大文件内存溢出
-            int totalLines = countFileLines(file);
+            // 限制单次增量读取的最大行数，防止内存溢出
+            int maxIncrementalLines = 2000;
+            
+            // 使用流式读取，从指定行开始读取新增部分
+            // 在读取过程中同时计算总行数，避免单独调用countFileLines方法
+            List<String> newLinesList = new ArrayList<>();
+            CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
+                    .onMalformedInput(CodingErrorAction.REPLACE)
+                    .onUnmappableCharacter(CodingErrorAction.REPLACE);
+            
+            int currentLine = 0;
+            int totalLines = 0;
+            
+            try (ReadableByteChannel channel = Files.newByteChannel(file.toPath());
+                 BufferedReader reader = new BufferedReader(Channels.newReader(channel, decoder, -1))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    totalLines++;
+                    // 如果当前行号大于等于起始行号，且新增行数未超过限制
+                    if (currentLine >= fromLine && newLinesList.size() < maxIncrementalLines) {
+                        newLinesList.add(line);
+                    }
+                    currentLine++;
+                }
+            }
             
             // 检测日志文件是否被轮转（文件行数减少）
             if (totalLines < fromLine && fromLine > 0) {
-                // 文件被轮转，通知前端重新加载
                 result.put("success", true);
                 result.put("fileName", fileName);
                 result.put("content", "");
@@ -394,20 +439,14 @@ public class FileReadService {
                 return result;
             }
             
-            // 限制单次增量读取的最大行数，防止内存溢出
-            int maxIncrementalLines = 2000;
+            // 如果新增行数超过限制，只保留最后maxIncrementalLines行
             int newLinesCount = totalLines - fromLine;
-            
-            // 如果新增行数超过限制，只读取最后的maxIncrementalLines行
-            int actualFromLine = fromLine;
             if (newLinesCount > maxIncrementalLines) {
-                actualFromLine = totalLines - maxIncrementalLines;
+                // 只保留最后maxIncrementalLines行
+                newLinesList = newLinesList.subList(Math.max(0, newLinesList.size() - maxIncrementalLines), newLinesList.size());
                 newLinesCount = maxIncrementalLines;
                 result.put("warning", String.format("新增行数过多，只读取最后 %d 行", maxIncrementalLines));
             }
-            
-            // 使用流式读取新增内容
-            List<String> newLinesList = readLinesFromFile(file, actualFromLine, totalLines);
             
             // 构建新增内容
             StringBuilder newContent = new StringBuilder();

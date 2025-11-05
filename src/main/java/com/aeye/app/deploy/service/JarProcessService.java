@@ -37,8 +37,9 @@ public class JarProcessService {
     private static final String OS = System.getProperty("os.name").toLowerCase();
     private static final boolean IS_WINDOWS = OS.contains("win");
     
-    // 使用线程池管理启动任务
-    private final ExecutorService executorService = Executors.newCachedThreadPool(r -> {
+    // 使用固定大小线程池管理启动任务，限制并发数，避免资源耗尽
+    private static final int MAX_CONCURRENT_STARTUPS = 10;
+    private final ExecutorService executorService = Executors.newFixedThreadPool(MAX_CONCURRENT_STARTUPS, r -> {
         Thread thread = new Thread(r, "jar-startup-thread");
         thread.setDaemon(true);
         return thread;
@@ -55,7 +56,7 @@ public class JarProcessService {
         File file = new File(jarFilePath2);
 
         if (!file.exists()) {
-            throw new RuntimeException("JAR文件不存在【" + jarFilePath+"】");
+            throw new RuntimeException("JAR文件不存在【" + jarFilePath2+"】");
         }
 
         Path source = Paths.get(jarFilePath2);

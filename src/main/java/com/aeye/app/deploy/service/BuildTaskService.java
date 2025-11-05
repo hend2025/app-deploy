@@ -27,8 +27,9 @@ public class BuildTaskService {
 
     private final Map<String, Process> cmdMap = new ConcurrentHashMap<>();
     
-    // 使用线程池管理构建任务
-    private final ExecutorService executorService = Executors.newCachedThreadPool(r -> {
+    // 使用固定大小线程池管理构建任务，限制并发数，避免资源耗尽
+    private static final int MAX_CONCURRENT_BUILDS = 5;
+    private final ExecutorService executorService = Executors.newFixedThreadPool(MAX_CONCURRENT_BUILDS, r -> {
         Thread thread = new Thread(r, "build-task-thread");
         thread.setDaemon(true);
         return thread;
@@ -50,6 +51,15 @@ public class BuildTaskService {
                 // 进程已结束但未清理，清理缓存
                 cmdMap.remove(appCode);
             }
+        }
+        
+        // 检查并发构建任务数，避免资源耗尽
+        int activeBuilds = (int) cmdMap.values().stream()
+                .filter(p -> p != null && p.isAlive())
+                .count();
+        if (activeBuilds >= MAX_CONCURRENT_BUILDS) {
+            logger.warn("当前并发构建任务数已达到上限: {}", activeBuilds);
+            throw new IllegalStateException("当前并发构建任务数已达到上限(" + MAX_CONCURRENT_BUILDS + ")，请等待其他构建任务完成");
         }
         
         executorService.submit(() -> {
