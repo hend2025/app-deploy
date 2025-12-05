@@ -1,52 +1,31 @@
 /* 全局样式 */
-.container-fluid.h-100 {
-  height: calc(100vh - 76px);
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
 }
 
-.table th {
-  border-top: none;
+body {
+  font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif;
+}
+
+/* Element Plus 自定义样式 */
+.el-card {
+  border-radius: 4px;
+}
+
+.el-table th {
   font-weight: 600;
 }
 
-.table td {
-  vertical-align: middle;
+.el-button-group .el-button {
+  padding: 5px 10px;
 }
 
-.btn-sm {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.875rem;
+/* 日志内容样式 */
+.log-line {
+  white-space: pre-wrap;
+  min-height: 1.4em;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
-
-.card-body {
-  padding: 1rem;
-}
-
-.table-responsive {
-  margin-top: 0.5rem;
-}
-
-/* 日志管理页面样式 */
-.file-controls-container {
-  padding: 15px;
-  background-color: #f8f9fa;
-  border-bottom: 1px solid #dee2e6;
-}
-
-.file-controls {
-  max-width: 100%;
-}
-
-/* 导航栏样式 */
-.navbar {
-  min-height: 56px;
-}
-
-.navbar-brand {
-  font-weight: 600;
-}
-
-/* 响应式间距 */
-.gap-2 {
-  gap: 0.5rem !important;
-}
-

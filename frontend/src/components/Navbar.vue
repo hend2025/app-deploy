@@ -1,38 +1,21 @@
 <template>
-  <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-    <div class="container">
-      <router-link class="navbar-brand" to="/deploy/">
-        Spring Boot 应用管理
-      </router-link>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse" id="navbarNav">
-        <ul class="navbar-nav ms-auto">
-          <li class="nav-item">
-            <router-link class="nav-link" to="/deploy/" :class="{ active: isActive('/deploy/') }">
-              版本构建
-            </router-link>
-          </li>
-          <li class="nav-item">
-            <router-link class="nav-link" to="/deploy/appMgt" :class="{ active: isActive('/deploy/appMgt') }">
-              应用启动
-            </router-link>
-          </li>
-          <li class="nav-item">
-            <router-link class="nav-link" to="/deploy/logMgt" :class="{ active: isActive('/deploy/logMgt') }">
-              日志查看
-            </router-link>
-          </li>
-          <li class="nav-item">
-            <router-link class="nav-link" to="/deploy/about" :class="{ active: isActive('/deploy/about') }">
-              关于
-            </router-link>
-          </li>
-        </ul>
-      </div>
-    </div>
-  </nav>
+  <el-menu
+    mode="horizontal"
+    :default-active="activeIndex"
+    background-color="#409EFF"
+    text-color="#fff"
+    active-text-color="#ffd04b"
+    router
+  >
+    <el-menu-item index="/deploy/" disabled class="brand-title">
+      Spring Boot 应用管理
+    </el-menu-item>
+    <div style="flex-grow: 1;"></div>
+    <el-menu-item index="/deploy/">版本构建</el-menu-item>
+    <el-menu-item index="/deploy/appMgt">应用启动</el-menu-item>
+    <el-menu-item index="/deploy/logMgt">日志查看</el-menu-item>
+    <el-menu-item index="/deploy/about">关于</el-menu-item>
+  </el-menu>
 </template>
 
 <script>
@@ -43,15 +26,23 @@ export default {
   name: 'Navbar',
   setup() {
     const route = useRoute()
-    
-    const isActive = (path) => {
-      return computed(() => route.path === path).value
-    }
-
-    return {
-      isActive
-    }
+    const activeIndex = computed(() => route.path)
+    return { activeIndex }
   }
 }
 </script>
 
+<style scoped>
+.el-menu--horizontal {
+  border-bottom: none;
+}
+.brand-title {
+  font-weight: bold;
+  font-size: 18px;
+  cursor: default;
+}
+:deep(.brand-title.is-disabled) {
+  opacity: 1 !important;
+  color: #fff !important;
+}
+</style>
