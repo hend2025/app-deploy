@@ -1,19 +1,19 @@
 package com.aeye.app.deploy.service;
 
+import com.aeye.app.deploy.mapper.VerInfoMapper;
 import com.aeye.app.deploy.model.VerInfo;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ClassPathResource;
-import org.springframework.core.io.Resource;
-
-import java.io.File;
-import java.io.IOException;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
+import java.io.File;
+import java.util.Date;
+import java.util.List;
 
 @Service
 public class VerMgtService {
@@ -21,101 +21,123 @@ public class VerMgtService {
     @Value("${app.directory.data:/home/data}")
     private String dataDir;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private final Map<String, VerInfo> versionCache = new ConcurrentHashMap<>();
+    @Autowired
+    private VerInfoMapper verInfoMapper;
 
-    
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     @PostConstruct
     public void init() {
-        loadDataFromFile();
+        // 如果数据库为空，从JSON文件导入初始数据
+        if (verInfoMapper.selectCount(null) == 0) {
+            importFromJson();
+        }
+        // 启动时重置所有状态为就绪
+        resetAllStatus();
+    }
+
+    /**
+     * 从JSON文件导入数据到数据库
+     */
+    private void importFromJson() {
+        try {
+            File externalFile = new File(dataDir, "versions.json");
+            List<VerInfo> versions;
+            
+            if (externalFile.exists()) {
+                versions = objectMapper.readValue(externalFile, new TypeReference<List<VerInfo>>() {});
+            } else {
+                ClassPathResource resource = new ClassPathResource("data/versions.json");
+                if (resource.exists()) {
+                    versions = objectMapper.readValue(resource.getInputStream(), new TypeReference<List<VerInfo>>() {});
+                } else {
+                    return;
+                }
+            }
+            
+            for (VerInfo ver : versions) {
+                ver.setStatus("0");
+                verInfoMapper.insert(ver);
+            }
+            System.out.println("已从JSON导入 " + versions.size() + " 条版本数据到数据库");
+        } catch (Exception e) {
+            System.err.println("导入版本数据失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 重置所有状态为就绪
+     */
+    private void resetAllStatus() {
+        List<VerInfo> all = verInfoMapper.selectList(null);
+        for (VerInfo ver : all) {
+            ver.setStatus("0");
+            verInfoMapper.updateById(ver);
+        }
     }
 
     /**
      * 获取所有版本信息
      */
     public List<VerInfo> getAllVersions() {
-        return new ArrayList<>(versionCache.values());
+        return verInfoMapper.selectList(null);
     }
-    
+
     /**
      * 根据ID获取版本信息
      */
     public VerInfo getVersionById(String id) {
-        return versionCache.get(id);
+        return verInfoMapper.selectById(id);
     }
 
-    public VerInfo updateStatus(String id,String status,String verNo) {
-        VerInfo appVersion = versionCache.get(id);
-        if (appVersion == null) {
+    /**
+     * 更新状态
+     */
+    public VerInfo updateStatus(String id, String status, String verNo) {
+        VerInfo verInfo = verInfoMapper.selectById(id);
+        if (verInfo == null) {
             return null;
         }
 
-        appVersion.setStatus(status);
-        appVersion.setUpdateTime(new Date());
+        verInfo.setStatus(status);
+        verInfo.setUpdateTime(new Date());
         if (verNo != null && !verNo.trim().isEmpty()) {
-            appVersion.setVersion(verNo);
+            verInfo.setVersion(verNo);
         }
 
-        versionCache.put(id, appVersion);
-        saveDataToFile();
-
-        return appVersion;
+        verInfoMapper.updateById(verInfo);
+        return verInfo;
     }
 
     /**
      * 根据应用名称搜索版本
      */
     public List<VerInfo> searchVersionsByAppName(String appName) {
-        return versionCache.values().stream()
-                .filter(version -> version.getAppName().toLowerCase().contains(appName.toLowerCase()))
-                .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+        if (appName == null || appName.trim().isEmpty()) {
+            return getAllVersions();
+        }
+        LambdaQueryWrapper<VerInfo> wrapper = new LambdaQueryWrapper<>();
+        wrapper.like(VerInfo::getAppName, appName);
+        return verInfoMapper.selectList(wrapper);
     }
 
     /**
-     * 从文件加载数据
+     * 保存版本信息
      */
-    private void loadDataFromFile() {
-        try {
-            File dataFile = new File(dataDir, "versions.json");
-            if (dataFile.exists()) {
-                List<VerInfo> versions = objectMapper.readValue(dataFile, new TypeReference<List<VerInfo>>() {});
-                for (VerInfo version : versions) {
-                    version.setStatus("0");
-                    versionCache.put(version.getAppCode(), version);
-                }
-            } else {
-                Resource resource = new ClassPathResource("data/versions.json");
-                if (resource.exists()) {
-                    List<VerInfo> versions = objectMapper.readValue(resource.getInputStream(), new TypeReference<List<VerInfo>>() {});
-                    for (VerInfo version : versions) {
-                        version.setStatus("0");
-                        versionCache.put(version.getAppCode(), version);
-                    }
-                    saveDataToFile();
-                }
-            }
-
-        }catch (Exception e){
-            System.err.println("读取版本数据失败: " + e.getMessage());
+    public void saveVersion(VerInfo verInfo) {
+        verInfo.setUpdateTime(new Date());
+        VerInfo existing = verInfoMapper.selectById(verInfo.getAppCode());
+        if (existing != null) {
+            verInfoMapper.updateById(verInfo);
+        } else {
+            verInfoMapper.insert(verInfo);
         }
     }
-    
+
     /**
-     * 保存数据到文件
+     * 删除版本信息
      */
-    private void saveDataToFile() {
-        try {
-            File dataFile = new File(dataDir, "versions.json");
-            File parentDir = dataFile.getParentFile();
-            if (!parentDir.exists()) {
-                parentDir.mkdirs();
-            }
-            
-            List<VerInfo> versions = new ArrayList<>(versionCache.values());
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(dataFile, versions);
-        } catch (IOException e) {
-            System.err.println("保存版本数据失败: " + e.getMessage());
-        }
+    public void deleteVersion(String appCode) {
+        verInfoMapper.deleteById(appCode);
     }
-
 }

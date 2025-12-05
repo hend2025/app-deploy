@@ -103,6 +103,14 @@ export const appMgtApi = {
   // 停止应用
   stopApp(data) {
     return api.post('/appMgt/stop', data)
+  },
+  // 保存应用（新增/编辑）
+  saveApp(data) {
+    return api.post('/appMgt/save', data)
+  },
+  // 删除应用
+  deleteApp(data) {
+    return api.post('/appMgt/delete', data)
   }
 }
 
@@ -119,6 +127,14 @@ export const verBuildApi = {
   // 停止构建
   stop(data) {
     return api.post('/verBuild/stop', data)
+  },
+  // 保存版本（新增/编辑）
+  saveVersion(data) {
+    return api.post('/verBuild/save', data)
+  },
+  // 删除版本
+  deleteVersion(data) {
+    return api.post('/verBuild/delete', data)
   }
 }
 

@@ -18,7 +18,15 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/deploy': {
+      '/deploy/appMgt': {
+        target: 'http://127.0.0.1:7080',
+        changeOrigin: true
+      },
+      '/deploy/verBuild': {
+        target: 'http://127.0.0.1:7080',
+        changeOrigin: true
+      },
+      '/deploy/logs': {
         target: 'http://127.0.0.1:7080',
         changeOrigin: true
       }

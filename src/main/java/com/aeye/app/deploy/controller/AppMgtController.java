@@ -145,6 +145,57 @@ public class AppMgtController {
         }
     }
 
+    @PostMapping("/save")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> saveApp(@RequestBody AppInfo appInfo) {
+        try {
+            if (appInfo.getAppCode() == null || appInfo.getAppCode().trim().isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "应用编码不能为空");
+                return ResponseEntity.ok(response);
+            }
+
+            appMgtService.saveApp(appInfo);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "保存成功");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "保存失败: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    @PostMapping("/delete")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> deleteApp(@RequestBody Map<String, String> request) {
+        try {
+            String appCode = request.get("appCode");
+            if (appCode == null || appCode.trim().isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "应用编码不能为空");
+                return ResponseEntity.ok(response);
+            }
+
+            appMgtService.deleteApp(appCode);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "删除成功");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "删除失败: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
     @PostMapping("/stop")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> stopApp(@RequestBody Map<String, String> request) {

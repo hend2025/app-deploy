@@ -10,7 +10,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.io.File;
 
 @RestController
 @RequestMapping("/verBuild")
@@ -74,20 +73,14 @@ public class VerBuildController {
                 return ResponseEntity.ok(response);
             }
 
-            String scriptPath = appVersion.getScript();
-            if (scriptPath == null || scriptPath.trim().isEmpty()) {
+            // 检查是否配置了构建脚本（根据操作系统检查对应字段）
+            boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+            String scriptContent = isWindows ? appVersion.getScriptCmd() : appVersion.getScriptSh();
+            if (scriptContent == null || scriptContent.trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "应用未配置脚本路径");
-                return ResponseEntity.ok(response);
-            }
-
-            // 检查脚本文件是否存在
-            File scriptFile = new File(scriptPath);
-            if (!scriptFile.exists()) {
-                Map<String, Object> response = new HashMap<>();
-                response.put("success", false);
-                response.put("message", "脚本文件不存在: " + scriptPath);
+                String osType = isWindows ? "Windows(script_cmd)" : "Linux(script_sh)";
+                response.put("message", "应用未配置" + osType + "构建脚本");
                 return ResponseEntity.ok(response);
             }
 
@@ -104,6 +97,55 @@ public class VerBuildController {
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    @PostMapping("/save")
+    public ResponseEntity<Map<String, Object>> saveVersion(@RequestBody VerInfo verInfo) {
+        try {
+            if (verInfo.getAppCode() == null || verInfo.getAppCode().trim().isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "应用编码不能为空");
+                return ResponseEntity.ok(response);
+            }
+
+            verMgtService.saveVersion(verInfo);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "保存成功");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "保存失败: " + e.getMessage());
+            return ResponseEntity.internalServerError().body(response);
+        }
+    }
+
+    @PostMapping("/delete")
+    public ResponseEntity<Map<String, Object>> deleteVersion(@RequestBody Map<String, String> request) {
+        try {
+            String appCode = request.get("appCode");
+            if (appCode == null || appCode.trim().isEmpty()) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "应用编码不能为空");
+                return ResponseEntity.ok(response);
+            }
+
+            verMgtService.deleteVersion(appCode);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            response.put("message", "删除成功");
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", false);
+            response.put("message", "删除失败: " + e.getMessage());
             return ResponseEntity.internalServerError().body(response);
         }
     }

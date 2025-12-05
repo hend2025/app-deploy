@@ -6,12 +6,28 @@ server:
 spring:
   application:
     name: app-deploy
-  
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/medicare_test?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: input
+
 app:
+  # 开发模式：true 时前端请求代理到 Vite 开发服务器，实现热部署
+  dev-mode: false
   directory:
     data: /home/data
     release: /home/release
     logs: /home/logs
+    scripts: /home/scripts
   log:
     cleanup:
       enabled: true
@@ -20,5 +36,3 @@ app:
       enabled: true
       max-size-mb: 50
       check-interval-seconds: 180
-
-

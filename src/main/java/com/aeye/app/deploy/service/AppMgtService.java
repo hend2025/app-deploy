@@ -1,16 +1,19 @@
 package com.aeye.app.deploy.service;
 
+import com.aeye.app.deploy.mapper.AppInfoMapper;
 import com.aeye.app.deploy.model.AppInfo;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
 import java.io.File;
-import java.io.IOException;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Date;
+import java.util.List;
 
 @Service
 public class AppMgtService {
@@ -18,49 +21,44 @@ public class AppMgtService {
     @Value("${app.directory.data:/home/data}")
     private String dataDir;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-    private final Map<String, AppInfo> appCache = new ConcurrentHashMap<>();
+    @Autowired
+    private AppInfoMapper appInfoMapper;
 
-    private static final String APPS_FILE = "apps.json";
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @PostConstruct
     public void init() {
-        objectMapper.enable(SerializationFeature.INDENT_OUTPUT);
-        loadApps();
-    }
-
-    /**
-     * 加载应用列表
-     */
-    private void loadApps() {
-        try {
-            File file = new File(dataDir, APPS_FILE);
-            if (file.exists()) {
-                AppInfo[] apps = objectMapper.readValue(file, AppInfo[].class);
-                for (AppInfo app : apps) {
-                    appCache.put(app.getAppCode(), app);
-                }
-            }
-        } catch (IOException e) {
-            System.err.println("加载应用列表失败: " + e.getMessage());
+        // 如果数据库为空，从JSON文件导入初始数据
+        if (appInfoMapper.selectCount(null) == 0) {
+            importFromJson();
         }
     }
 
     /**
-     * 保存应用列表到文件
+     * 从JSON文件导入数据到数据库
      */
-    private void saveApps() {
+    private void importFromJson() {
         try {
-            File dir = new File(dataDir);
-            if (!dir.exists()) {
-                dir.mkdirs();
+            File externalFile = new File(dataDir, "apps.json");
+            List<AppInfo> apps;
+            
+            if (externalFile.exists()) {
+                apps = objectMapper.readValue(externalFile, new TypeReference<List<AppInfo>>() {});
+            } else {
+                ClassPathResource resource = new ClassPathResource("data/apps.json");
+                if (resource.exists()) {
+                    apps = objectMapper.readValue(resource.getInputStream(), new TypeReference<List<AppInfo>>() {});
+                } else {
+                    return;
+                }
             }
             
-            File file = new File(dataDir, APPS_FILE);
-            List<AppInfo> appList = new ArrayList<>(appCache.values());
-            objectMapper.writeValue(file, appList);
-        } catch (IOException e) {
-            System.err.println("保存应用列表失败: " + e.getMessage());
+            for (AppInfo app : apps) {
+                appInfoMapper.insert(app);
+            }
+            System.out.println("已从JSON导入 " + apps.size() + " 条应用数据到数据库");
+        } catch (Exception e) {
+            System.err.println("导入应用数据失败: " + e.getMessage());
         }
     }
 
@@ -68,14 +66,26 @@ public class AppMgtService {
      * 获取所有应用
      */
     public List<AppInfo> getAllApps() {
-        return new ArrayList<>(appCache.values());
+        return appInfoMapper.selectList(null);
+    }
+
+    /**
+     * 根据appCode搜索应用
+     */
+    public List<AppInfo> searchApps(String appCode) {
+        if (appCode == null || appCode.trim().isEmpty()) {
+            return getAllApps();
+        }
+        LambdaQueryWrapper<AppInfo> wrapper = new LambdaQueryWrapper<>();
+        wrapper.like(AppInfo::getAppCode, appCode);
+        return appInfoMapper.selectList(wrapper);
     }
 
     /**
      * 根据appCode获取应用
      */
     public AppInfo getAppByCode(String appCode) {
-        return appCache.get(appCode);
+        return appInfoMapper.selectById(appCode);
     }
 
     /**
@@ -83,7 +93,18 @@ public class AppMgtService {
      */
     public void saveApp(AppInfo appInfo) {
         appInfo.setUpdateTime(new Date());
-        appCache.put(appInfo.getAppCode(), appInfo);
-        saveApps();
+        AppInfo existing = appInfoMapper.selectById(appInfo.getAppCode());
+        if (existing != null) {
+            appInfoMapper.updateById(appInfo);
+        } else {
+            appInfoMapper.insert(appInfo);
+        }
+    }
+
+    /**
+     * 删除应用
+     */
+    public void deleteApp(String appCode) {
+        appInfoMapper.deleteById(appCode);
     }
 }

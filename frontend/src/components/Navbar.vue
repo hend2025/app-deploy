@@ -36,6 +36,9 @@ export default {
 .el-menu--horizontal {
   border-bottom: none;
 }
+:deep(.el-menu--horizontal .el-menu-item:not(.is-disabled).is-active) {
+  border-bottom: none !important;
+}
 .brand-title {
   font-weight: bold;
   font-size: 18px;
