@@ -144,6 +144,10 @@ export const logFileApi = {
   getFileList() {
     return api.get('/logs/file/log-files')
   },
+  // 浏览目录
+  browseDirectory(path = '') {
+    return api.get('/logs/file/browse', { params: { path } })
+  },
   // 读取文件最后N行
   readFileLastLines(fileName, lastLines = 3000) {
     return api.get('/logs/file/read-file-last-lines', { 

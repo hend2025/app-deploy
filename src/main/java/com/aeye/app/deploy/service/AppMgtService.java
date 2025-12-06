@@ -11,15 +11,11 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
-import java.io.File;
 import java.util.Date;
 import java.util.List;
 
 @Service
 public class AppMgtService {
-
-    @Value("${app.directory.data:/home/data}")
-    private String dataDir;
 
     @Autowired
     private AppInfoMapper appInfoMapper;
@@ -39,19 +35,11 @@ public class AppMgtService {
      */
     private void importFromJson() {
         try {
-            File externalFile = new File(dataDir, "apps.json");
-            List<AppInfo> apps;
-            
-            if (externalFile.exists()) {
-                apps = objectMapper.readValue(externalFile, new TypeReference<List<AppInfo>>() {});
-            } else {
-                ClassPathResource resource = new ClassPathResource("data/apps.json");
-                if (resource.exists()) {
-                    apps = objectMapper.readValue(resource.getInputStream(), new TypeReference<List<AppInfo>>() {});
-                } else {
-                    return;
-                }
+            ClassPathResource resource = new ClassPathResource("data/apps.json");
+            if (!resource.exists()) {
+                return;
             }
+            List<AppInfo> apps = objectMapper.readValue(resource.getInputStream(), new TypeReference<List<AppInfo>>() {});
             
             for (AppInfo app : apps) {
                 appInfoMapper.insert(app);

@@ -26,9 +26,6 @@ public class BuildTaskService {
     @Value("${app.directory.logs:/home/logs}")
     private String logsDir;
 
-    @Value("${app.directory.scripts:/home/scripts}")
-    private String scriptsDir;
-
     @Autowired
     private VerMgtService verMgtService;
 
@@ -63,18 +60,12 @@ public class BuildTaskService {
      * 创建临时脚本文件
      */
     private File createTempScript(String appCode, String scriptContent, String targetVersion) throws IOException {
-        // 确保脚本目录存在
-        File scriptDir = new File(scriptsDir);
-        if (!scriptDir.exists()) {
-            scriptDir.mkdirs();
-        }
-
         // 替换脚本中的版本号占位符
         String processedContent = scriptContent.replace("${VERSION}", targetVersion)
                                                .replace("$VERSION", targetVersion);
 
         String extension = isWindows() ? ".cmd" : ".sh";
-        File scriptFile = new File(scriptsDir, "build_" + appCode + "_" + System.currentTimeMillis() + extension);
+        File scriptFile = File.createTempFile("build_" + appCode + "_", extension);
         
         try (java.io.BufferedWriter writer = Files.newBufferedWriter(scriptFile.toPath(), StandardCharsets.UTF_8)) {
             writer.write(processedContent);

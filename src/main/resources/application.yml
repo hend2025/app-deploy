@@ -21,13 +21,9 @@ mybatis-plus:
       id-type: input
 
 app:
-  # 开发模式：true 时前端请求代理到 Vite 开发服务器，实现热部署
-  dev-mode: false
   directory:
-    data: /home/data
     release: /home/release
     logs: /home/logs
-    scripts: /home/scripts
   log:
     cleanup:
       enabled: true

@@ -6,6 +6,7 @@
     text-color="#fff"
     active-text-color="#ffd04b"
     router
+    :ellipsis="false"
   >
     <el-menu-item index="/deploy/" disabled class="brand-title">
       Spring Boot 应用管理
@@ -34,9 +35,16 @@ export default {
 <style scoped>
 .el-menu--horizontal {
   border-bottom: none;
+  flex-wrap: nowrap;
 }
 :deep(.el-menu--horizontal .el-menu-item:not(.is-disabled).is-active) {
   border-bottom: none !important;
+}
+:deep(.el-menu--horizontal > .el-menu-item) {
+  flex-shrink: 0;
+}
+:deep(.el-menu--horizontal .el-sub-menu__hide-arrow) {
+  display: none !important;
 }
 .brand-title {
   font-weight: bold;

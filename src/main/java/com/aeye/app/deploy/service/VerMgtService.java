@@ -11,15 +11,11 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
-import java.io.File;
 import java.util.Date;
 import java.util.List;
 
 @Service
 public class VerMgtService {
-
-    @Value("${app.directory.data:/home/data}")
-    private String dataDir;
 
     @Autowired
     private VerInfoMapper verInfoMapper;
@@ -41,19 +37,11 @@ public class VerMgtService {
      */
     private void importFromJson() {
         try {
-            File externalFile = new File(dataDir, "versions.json");
-            List<VerInfo> versions;
-            
-            if (externalFile.exists()) {
-                versions = objectMapper.readValue(externalFile, new TypeReference<List<VerInfo>>() {});
-            } else {
-                ClassPathResource resource = new ClassPathResource("data/versions.json");
-                if (resource.exists()) {
-                    versions = objectMapper.readValue(resource.getInputStream(), new TypeReference<List<VerInfo>>() {});
-                } else {
-                    return;
-                }
+            ClassPathResource resource = new ClassPathResource("data/versions.json");
+            if (!resource.exists()) {
+                return;
             }
+            List<VerInfo> versions = objectMapper.readValue(resource.getInputStream(), new TypeReference<List<VerInfo>>() {});
             
             for (VerInfo ver : versions) {
                 ver.setStatus("0");

@@ -1,41 +1,77 @@
 <template>
   <div class="page-container">
-    <!-- 文件控制区域 -->
-    <el-card class="controls-card">
-      <el-row :gutter="10" align="middle">
-        <el-col :span="10">
-          <el-select v-model="selectedFile" @change="onFileChange" placeholder="请选择日志文件..." style="width: 100%;">
-            <el-option v-for="file in fileList" :key="file" :label="file" :value="file" />
-          </el-select>
-        </el-col>
-        <el-col :span="3">
-          <el-select v-model="maxLines" style="width: 100%;">
-            <el-option label="2000行" value="2000" />
-            <el-option label="5000行" value="5000" />
-            <el-option label="10000行" value="10000" />
-            <el-option label="30000行" value="30000" />
-          </el-select>
-        </el-col>
-        <el-col :span="11">
-          <el-button-group>
-            <el-button :type="autoRefreshEnabled ? 'warning' : 'success'" @click="toggleAutoRefresh">
-              {{ autoRefreshEnabled ? '停止刷新' : '自动刷新' }}
-            </el-button>
-            <el-button type="success" :disabled="!selectedFile" @click="downloadCurrentLog">下载</el-button>
-            <el-button type="info" :disabled="!selectedFile" @click="scrollToBottom">到底部</el-button>
-            <el-button type="danger" :disabled="!selectedFile" @click="clearContent">清空</el-button>
-          </el-button-group>
-        </el-col>
-      </el-row>
-    </el-card>
+    <!-- 左侧目录树 -->
+    <div class="left-panel">
+      <el-card class="dir-card">
+        <!-- 路径导航 -->
+        <div class="path-nav">
+          <el-button :icon="ArrowLeft" size="small" :disabled="!parentPath" @click="goToParent" />
+          <el-button :icon="ArrowRight" size="small" disabled />
+          <el-input v-model="currentPath" size="small" readonly class="path-input" />
+        </div>
+        <!-- 统计信息 -->
+        <div class="dir-stats">
+          共 {{ fileCount }} 个文件, {{ folderCount }} 个文件夹, {{ totalSize }}
+        </div>
+        <!-- 目录列表 -->
+        <div class="dir-list">
+          <!-- 返回上级 -->
+          <div v-if="parentPath" class="dir-item" @dblclick="goToParent">
+            <el-icon class="folder-icon"><Folder /></el-icon>
+            <span class="item-name">..</span>
+            <span class="item-time">-</span>
+          </div>
+          <!-- 目录和文件列表 -->
+          <div 
+            v-for="item in dirItems" 
+            :key="item.path" 
+            class="dir-item"
+            :class="{ 'is-selected': selectedFile === item.path && !item.isDirectory }"
+            @dblclick="handleItemDblClick(item)"
+          >
+            <el-icon class="folder-icon" v-if="item.isDirectory"><Folder /></el-icon>
+            <el-icon class="file-icon" v-else><Document /></el-icon>
+            <span class="item-name" :title="item.name">{{ item.name }}</span>
+            <span class="item-time">{{ item.lastModified }}</span>
+          </div>
+        </div>
+      </el-card>
+    </div>
 
-    <!-- 默认内容区域 -->
-    <el-card v-if="!selectedFile" class="log-card empty-card">
-      <el-empty description="请选择一个日志文件查看实时内容" />
-    </el-card>
+    <!-- 右侧日志显示 -->
+    <div class="right-panel">
+      <!-- 控制区域 -->
+      <el-card class="controls-card">
+        <el-row :gutter="10" align="middle">
+          <el-col :span="8">
+            <span class="selected-file-label">{{ selectedFileName || '请选择日志文件' }}</span>
+          </el-col>
+          <el-col :span="4">
+            <el-select v-model="maxLines" size="small" style="width: 100%;">
+              <el-option label="2000行" value="2000" />
+              <el-option label="5000行" value="5000" />
+              <el-option label="10000行" value="10000" />
+            </el-select>
+          </el-col>
+          <el-col :span="12" style="text-align: right;">
+            <el-button-group>
+              <el-button :type="autoRefreshEnabled ? 'warning' : 'success'" size="small" @click="toggleAutoRefresh">
+                {{ autoRefreshEnabled ? '停止刷新' : '自动刷新' }}
+              </el-button>
+              <el-button type="success" size="small" :disabled="!selectedFile" @click="downloadCurrentLog">下载</el-button>
+              <el-button type="info" size="small" :disabled="!selectedFile" @click="scrollToBottom">到底部</el-button>
+              <el-button type="danger" size="small" :disabled="!selectedFile" @click="clearContent">清空</el-button>
+            </el-button-group>
+          </el-col>
+        </el-row>
+      </el-card>
 
-    <!-- 日志内容区域 -->
-    <div v-else ref="logContent" class="log-content-area" v-html="formattedLogContent"></div>
+      <!-- 日志内容区域 -->
+      <el-card v-if="!selectedFile" class="log-card empty-card">
+        <el-empty description="双击左侧日志文件查看内容" />
+      </el-card>
+      <div v-else ref="logContent" class="log-content-area" v-html="formattedLogContent"></div>
+    </div>
   </div>
 </template>
 
@@ -43,12 +79,23 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { logFileApi } from '../api'
 import { ElMessage } from 'element-plus'
+import { Folder, Document, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 
 export default {
   name: 'LogMgt',
+  components: { Folder, Document, ArrowLeft, ArrowRight },
   setup() {
-    const fileList = ref([])
+    // 目录相关
+    const currentPath = ref('')
+    const parentPath = ref('')
+    const dirItems = ref([])
+    const fileCount = ref(0)
+    const folderCount = ref(0)
+    const totalSize = ref('0B')
+    
+    // 日志相关
     const selectedFile = ref('')
+    const selectedFileName = ref('')
     const maxLines = ref('2000')
     const logContentText = ref('')
     const logLineCount = ref(0)
@@ -66,21 +113,40 @@ export default {
       return displayLines.map(line => `<div class="log-line">${escapeHtml(line)}</div>`).join('')
     })
 
-    const loadFileList = async () => {
+    // 加载目录内容
+    const loadDirectory = async (path = '') => {
       try {
-        const response = await logFileApi.getFileList()
-        if (response.success && Array.isArray(response.logFiles)) {
-          fileList.value = response.logFiles.map(file => file.fullPath)
+        const response = await logFileApi.browseDirectory(path)
+        if (response.success) {
+          currentPath.value = response.currentPath
+          parentPath.value = response.parentPath
+          dirItems.value = response.items
+          fileCount.value = response.fileCount
+          folderCount.value = response.folderCount
+          totalSize.value = response.totalSize
         } else {
-          fileList.value = []
+          ElMessage.error(response.message || '加载目录失败')
         }
       } catch (error) {
-        ElMessage.error('获取文件列表失败: ' + error.message)
+        ElMessage.error('加载目录失败: ' + error.message)
       }
     }
 
-    const onFileChange = () => {
-      if (selectedFile.value) {
+    // 返回上级目录
+    const goToParent = () => {
+      if (parentPath.value) {
+        loadDirectory(parentPath.value)
+      }
+    }
+
+    // 双击处理
+    const handleItemDblClick = (item) => {
+      if (item.isDirectory) {
+        loadDirectory(item.path)
+      } else {
+        // 选择文件并加载日志
+        selectedFile.value = item.path
+        selectedFileName.value = item.name
         logLineCount.value = 0
         logContentText.value = '加载中...'
         loadLogContent()
@@ -154,31 +220,123 @@ export default {
       if (selectedFile.value) window.open(logFileApi.downloadFile(selectedFile.value), '_blank')
     }
 
-    onMounted(() => loadFileList())
+    onMounted(() => loadDirectory())
     onUnmounted(() => { if (autoRefreshInterval) clearInterval(autoRefreshInterval) })
 
     return {
-      fileList, selectedFile, maxLines, logContentText, formattedLogContent,
-      autoRefreshEnabled, logContent, onFileChange, toggleAutoRefresh,
+      currentPath, parentPath, dirItems, fileCount, folderCount, totalSize,
+      selectedFile, selectedFileName, maxLines, logContentText, formattedLogContent,
+      autoRefreshEnabled, logContent, ArrowLeft, ArrowRight,
+      loadDirectory, goToParent, handleItemDblClick, toggleAutoRefresh,
       scrollToBottom, clearContent, downloadCurrentLog
     }
   }
 }
 </script>
 
+
 <style scoped>
 .page-container {
-  padding: 20px;
+  padding: 15px;
   height: calc(100vh - 61px);
   display: flex;
-  flex-direction: column;
   gap: 15px;
   background-color: #f5f7fa;
+  overflow: hidden;
+}
+.left-panel {
+  width: 360px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+.right-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+.dir-card {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  border-radius: 8px;
+}
+:deep(.dir-card .el-card__body) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  overflow: hidden;
+}
+.path-nav {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+.path-input {
+  flex: 1;
+}
+.dir-stats {
+  font-size: 12px;
+  color: #909399;
+  padding: 5px 0;
+  border-bottom: 1px solid #ebeef5;
+  margin-bottom: 8px;
+}
+.dir-list {
+  flex: 1;
+  overflow-y: auto;
+}
+.dir-item {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+.dir-item:hover {
+  background-color: #f5f7fa;
+}
+.dir-item.is-selected {
+  background-color: #ecf5ff;
+}
+.folder-icon {
+  color: #e6a23c;
+  font-size: 18px;
+  margin-right: 8px;
+}
+.file-icon {
+  color: #909399;
+  font-size: 18px;
+  margin-right: 8px;
+}
+.item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.item-time {
+  font-size: 12px;
+  color: #909399;
+  margin-left: 10px;
+  white-space: nowrap;
 }
 .controls-card {
   flex-shrink: 0;
   border-radius: 8px;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
+}
+.selected-file-label {
+  font-size: 13px;
+  color: #606266;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
 }
 .log-card.empty-card {
   flex: 1;
@@ -204,8 +362,5 @@ export default {
   white-space: pre-wrap;
   min-height: 1.5em;
   word-wrap: break-word;
-}
-:deep(.el-select) {
-  width: 100%;
 }
 </style>
