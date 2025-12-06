@@ -14,7 +14,6 @@
     <el-menu-item index="/deploy/">版本构建</el-menu-item>
     <el-menu-item index="/deploy/appMgt">应用启动</el-menu-item>
     <el-menu-item index="/deploy/logMgt">日志查看</el-menu-item>
-    <el-menu-item index="/deploy/about">关于</el-menu-item>
   </el-menu>
 </template>
 

@@ -24,7 +24,11 @@
 
       <!-- 版本列表 -->
       <el-table :data="sortedVersionList" v-loading="loading" stripe border size="large">
-        <el-table-column prop="appCode" label="应用编码" width="220" />
+        <el-table-column prop="appCode" label="应用编码" width="220">
+          <template #default="{ row }">
+            <strong>{{ row.appCode }}</strong>
+          </template>
+        </el-table-column>
         <el-table-column prop="appName" label="应用名称" min-width="250">
           <template #default="{ row }">
             <strong>{{ row.appName }}</strong>
@@ -69,28 +73,30 @@
     </el-dialog>
 
     <!-- 新增/编辑版本对话框 -->
-    <el-dialog v-model="editDialogVisible" :title="isEdit ? '编辑版本' : '新增版本'" width="800px">
-      <el-form :model="editForm" label-width="120px">
+    <el-dialog v-model="editDialogVisible" :title="isEdit ? '编辑版本' : '新增版本'" width="1200px" align-center>
+      <el-form :model="editForm" label-width="100px">
         <el-row :gutter="20">
-          <el-col :span="12">
+          <el-col :span="8">
             <el-form-item label="应用编码" required>
               <el-input v-model="editForm.appCode" :disabled="isEdit" placeholder="请输入应用编码" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :span="8">
             <el-form-item label="应用名称">
               <el-input v-model="editForm.appName" placeholder="请输入应用名称" />
             </el-form-item>
           </el-col>
+          <el-col :span="8">
+            <el-form-item label="版本号">
+              <el-input v-model="editForm.version" placeholder="请输入版本号" />
+            </el-form-item>
+          </el-col>
         </el-row>
-        <el-form-item label="版本号">
-          <el-input v-model="editForm.version" placeholder="请输入版本号" />
-        </el-form-item>
         <el-form-item label="Windows脚本">
-          <el-input v-model="editForm.scriptCmd" type="textarea" :rows="8" placeholder="Windows构建脚本内容（.bat/.cmd）" style="font-family: monospace;" />
+          <el-input v-model="editForm.scriptCmd" type="textarea" :rows="12" placeholder="Windows构建脚本内容（.bat/.cmd）" style="font-family: monospace;" />
         </el-form-item>
         <el-form-item label="Linux脚本">
-          <el-input v-model="editForm.scriptSh" type="textarea" :rows="8" placeholder="Linux构建脚本内容（.sh）" style="font-family: monospace;" />
+          <el-input v-model="editForm.scriptSh" type="textarea" :rows="12" placeholder="Linux构建脚本内容（.sh）" style="font-family: monospace;" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -254,7 +260,7 @@ export default {
     const startAutoRefresh = () => {
       autoRefreshInterval = setInterval(() => {
         if (!hasModalOpen()) searchVersions()
-      }, 15000)
+      }, 30000)
     }
 
     onMounted(() => {
