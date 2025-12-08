@@ -93,27 +93,40 @@ public class ProcessUtil {
     }
     
     /**
-     * 从字符串中提取jar文件名
+     * 从字符串中提取jar文件名，并返回应用编码（去掉版本号后缀）
      */
     private static String extractJarFileName(String jarPart) {
         try {
+            String jarFileName = null;
+            
             // 查找最后一个路径分隔符后的文件名
             int lastSeparator = Math.max(jarPart.lastIndexOf('/'), jarPart.lastIndexOf('\\'));
             if (lastSeparator >= 0) {
-                return jarPart.substring(lastSeparator + 1);
-            }
-            // 如果没有路径分隔符，查找.jar前面的部分
-            int jarIndex = jarPart.indexOf(".jar");
-            if (jarIndex > 0) {
-                // 向前查找，直到遇到空格或特殊字符
-                int start = jarIndex;
-                while (start > 0 && !Character.isWhitespace(jarPart.charAt(start - 1)) 
-                       && jarPart.charAt(start - 1) != '=' && jarPart.charAt(start - 1) != '\"') {
-                    start--;
+                jarFileName = jarPart.substring(lastSeparator + 1);
+            } else {
+                // 如果没有路径分隔符，查找.jar前面的部分
+                int jarIndex = jarPart.indexOf(".jar");
+                if (jarIndex > 0) {
+                    // 向前查找，直到遇到空格或特殊字符
+                    int start = jarIndex;
+                    while (start > 0 && !Character.isWhitespace(jarPart.charAt(start - 1)) 
+                           && jarPart.charAt(start - 1) != '=' && jarPart.charAt(start - 1) != '\"') {
+                        start--;
+                    }
+                    jarFileName = jarPart.substring(start, jarIndex + 4);
                 }
-                return jarPart.substring(start, jarIndex + 4);
             }
-            return null;
+            
+            if (jarFileName == null) {
+                return null;
+            }
+            
+            // 移除.jar后缀
+            String appName = jarFileName.replace(".jar", "");
+            
+            // 注意：实际运行的jar文件名是 appCode.jar（不带版本号）
+            // 所以这里直接返回去掉.jar后缀的文件名作为应用编码
+            return appName;
         } catch (Exception e) {
             return null;
         }

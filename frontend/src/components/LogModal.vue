@@ -48,24 +48,44 @@ export default {
     let autoRefreshInterval = null
 
     const showLog = (fileName) => {
+      // 先清理之前可能存在的定时器
+      if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval)
+        autoRefreshInterval = null
+      }
+      autoRefreshEnabled.value = false
+      
       currentLogFile.value = fileName
       logLineCount.value = 0
       logContentText.value = '加载中...'
       visible.value = true
       refreshLogContent()
       
+      // 延迟启动自动刷新
       setTimeout(() => {
-        if (!autoRefreshEnabled.value) {
+        if (visible.value && !autoRefreshEnabled.value) {
           toggleAutoRefresh()
         }
-      }, 3000)
+      }, 2000)
     }
 
+    // 优化：使用更高效的行数限制方法
     const limitLogLines = (content, maxLines) => {
-      const estimatedLines = content.length / 100
-      if (estimatedLines <= maxLines * 0.8) return content
-      const lines = content.split('\n')
-      if (lines.length > maxLines) return lines.slice(-maxLines).join('\n')
+      // 快速估算：如果内容长度较小，直接返回
+      if (content.length < maxLines * 50) return content
+      
+      // 从后向前查找换行符，避免分割整个字符串
+      let lineCount = 0
+      let pos = content.length
+      while (pos > 0 && lineCount < maxLines) {
+        pos = content.lastIndexOf('\n', pos - 1)
+        if (pos === -1) break
+        lineCount++
+      }
+      
+      if (lineCount >= maxLines && pos > 0) {
+        return content.substring(pos + 1)
+      }
       return content
     }
 
@@ -81,13 +101,17 @@ export default {
         } else {
           const response = await logFileApi.readFileIncremental(currentLogFile.value, logLineCount.value)
           if (response.fileRotated) {
+            // 文件轮转时，重新加载内容
             const reloadResponse = await logFileApi.readFileLastLines(currentLogFile.value, 2000)
-            logContentText.value += reloadResponse.content
-            logContentText.value = limitLogLines(logContentText.value, 3000)
+            logContentText.value = reloadResponse.content
             logLineCount.value = reloadResponse.totalLines
             await nextTick()
             scrollToBottom()
           } else if (response.hasNewContent) {
+            // 确保新内容前有换行符
+            if (logContentText.value && !logContentText.value.endsWith('\n')) {
+              logContentText.value += '\n'
+            }
             logContentText.value += response.content
             logContentText.value = limitLogLines(logContentText.value, 2000)
             logLineCount.value = response.totalLines

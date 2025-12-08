@@ -98,6 +98,28 @@ public class VerMgtService {
     }
 
     /**
+     * 更新状态和日志文件路径
+     */
+    public VerInfo updateStatusAndLogFile(String id, String status, String verNo, String logFile) {
+        VerInfo verInfo = verInfoMapper.selectById(id);
+        if (verInfo == null) {
+            return null;
+        }
+
+        verInfo.setStatus(status);
+        verInfo.setUpdateTime(new Date());
+        if (verNo != null && !verNo.trim().isEmpty()) {
+            verInfo.setVersion(verNo);
+        }
+        if (logFile != null && !logFile.trim().isEmpty()) {
+            verInfo.setLogFile(logFile);
+        }
+
+        verInfoMapper.updateById(verInfo);
+        return verInfo;
+    }
+
+    /**
      * 根据应用名称搜索版本
      */
     public List<VerInfo> searchVersionsByAppName(String appName) {

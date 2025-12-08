@@ -255,22 +255,11 @@ export default {
       }
     }
 
-    const hasModalOpen = () => document.querySelectorAll('.el-dialog__wrapper:not([style*="display: none"])').length > 0
-
-    const startAutoRefresh = () => {
-      autoRefreshInterval = setInterval(() => {
-        if (!hasModalOpen()) searchVersions()
-      }, 30000)
-    }
-
     onMounted(() => {
       searchVersions()
-      startAutoRefresh()
     })
 
-    onUnmounted(() => {
-      if (autoRefreshInterval) clearInterval(autoRefreshInterval)
-    })
+    onUnmounted(() => { })
 
     return {
       searchTerm, versionList, loading, currentVersion, buildForm,

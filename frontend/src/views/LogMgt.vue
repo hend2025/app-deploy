@@ -70,7 +70,7 @@
       <el-card v-if="!selectedFile" class="log-card empty-card">
         <el-empty description="双击左侧日志文件查看内容" />
       </el-card>
-      <div v-else ref="logContent" class="log-content-area" v-html="formattedLogContent"></div>
+      <pre v-else ref="logContent" class="log-content-area">{{ formattedLogContent }}</pre>
     </div>
   </div>
 </template>
@@ -104,13 +104,15 @@ export default {
     
     let autoRefreshInterval = null
 
+    // 使用缓存避免重复计算
     const formattedLogContent = computed(() => {
       if (!logContentText.value) return ''
-      const maxDisplayLines = 30000
+      const maxDisplayLines = 10000
       const lines = logContentText.value.split('\n')
-      const escapeHtml = (text) => text.replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]))
       const displayLines = lines.length > maxDisplayLines ? lines.slice(-maxDisplayLines) : lines
-      return displayLines.map(line => `<div class="log-line">${escapeHtml(line)}</div>`).join('')
+      // 简化渲染：使用 pre 标签的特性，不再为每行创建 div
+      const escapeHtml = (text) => text.replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]))
+      return displayLines.map(line => escapeHtml(line)).join('\n')
     })
 
     // 加载目录内容
@@ -156,11 +158,23 @@ export default {
       }
     }
 
+    // 优化：使用更高效的行数限制方法
     const limitLogLines = (content, maxLines) => {
-      const estimatedLines = content.length / 100
-      if (estimatedLines <= maxLines * 0.8) return content
-      const lines = content.split('\n')
-      if (lines.length > maxLines) return lines.slice(-maxLines).join('\n')
+      // 快速估算：如果内容长度较小，直接返回
+      if (content.length < maxLines * 50) return content
+      
+      // 从后向前查找换行符，避免分割整个字符串
+      let lineCount = 0
+      let pos = content.length
+      while (pos > 0 && lineCount < maxLines) {
+        pos = content.lastIndexOf('\n', pos - 1)
+        if (pos === -1) break
+        lineCount++
+      }
+      
+      if (lineCount >= maxLines && pos > 0) {
+        return content.substring(pos + 1)
+      }
       return content
     }
 
@@ -177,14 +191,17 @@ export default {
         } else {
           const response = await logFileApi.readFileIncremental(selectedFile.value, logLineCount.value)
           if (response.fileRotated) {
+            // 文件轮转时，重新加载内容
             const reloadResponse = await logFileApi.readFileLastLines(selectedFile.value, parseInt(maxLines.value))
-            logContentText.value += reloadResponse.content
-            const totalMaxLines = Math.floor(parseInt(maxLines.value) * 1.5)
-            logContentText.value = limitLogLines(logContentText.value, totalMaxLines)
+            logContentText.value = reloadResponse.content
             logLineCount.value = reloadResponse.totalLines
             await nextTick()
             scrollToBottom()
           } else if (response.hasNewContent) {
+            // 确保新内容前有换行符
+            if (logContentText.value && !logContentText.value.endsWith('\n')) {
+              logContentText.value += '\n'
+            }
             logContentText.value += response.content
             logContentText.value = limitLogLines(logContentText.value, parseInt(maxLines.value))
             logLineCount.value = response.totalLines
@@ -351,16 +368,14 @@ export default {
   overflow-x: hidden;
   background-color: #fff;
   padding: 15px;
+  margin: 0;
   border: 1px solid #e4e7ed;
   border-radius: 8px;
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 13px;
   line-height: 1.5;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
-}
-.log-content-area .log-line {
   white-space: pre-wrap;
-  min-height: 1.5em;
   word-wrap: break-word;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
 }
 </style>

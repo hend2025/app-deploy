@@ -163,8 +163,6 @@ export default {
     const isEdit = ref(false)
     const editForm = ref({ appCode: '', version: '', params: '', logFile: '' })
     const logModal = ref(null)
-    
-    let autoRefreshInterval = null
 
     const defaultParams = `-Xmx1048m
 -Xms512m
@@ -308,10 +306,8 @@ export default {
       }
     }
 
-    const hasModalOpen = () => document.querySelectorAll('.el-dialog__wrapper:not([style*="display: none"])').length > 0
-
     onMounted(() => { searchApps() })
-    onUnmounted(() => { if (autoRefreshInterval) clearInterval(autoRefreshInterval) })
+    onUnmounted(() => { })
 
     return {
       searchText, appList, loading, currentApp, startForm,

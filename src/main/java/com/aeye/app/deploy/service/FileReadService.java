@@ -349,7 +349,7 @@ public class FileReadService {
     
     /**
      * 增量读取文件内容（从指定行数开始读取新增内容）
-     * 优化版本：使用 skip() 跳过已读取的行，提高性能
+     * 优化版本：只读取新增行，不再统计文件总行数（避免遍历整个文件）
      */
     public Map<String, Object> readFileIncremental(String fileName, int fromLine) {
         Map<String, Object> result = new HashMap<>();
@@ -383,40 +383,44 @@ public class FileReadService {
             // 限制单次增量读取的最大行数，防止内存溢出
             int maxIncrementalLines = 2000;
             
-            // 优化：使用 Stream API 的 skip() 来跳过已读取的行，避免逐行遍历前面的内容
             List<String> newLinesList = new ArrayList<>();
             CharsetDecoder decoder = StandardCharsets.UTF_8.newDecoder()
                     .onMalformedInput(CodingErrorAction.REPLACE)
                     .onUnmappableCharacter(CodingErrorAction.REPLACE);
             
-            int totalLines = 0;
+            int currentLine = 0;
+            boolean fileRotated = false;
             
             try (ReadableByteChannel channel = Files.newByteChannel(file.toPath());
                  BufferedReader reader = new BufferedReader(Channels.newReader(channel, decoder, -1))) {
-                // 优化：跳过前面已读取的行，提高性能
                 String line;
-                int skippedCount = 0;
                 
-                // 跳过前面的行
-                while (skippedCount < fromLine && (line = reader.readLine()) != null) {
-                    skippedCount++;
+                // 跳过前面已读取的行
+                while (currentLine < fromLine && (line = reader.readLine()) != null) {
+                    currentLine++;
                 }
-                totalLines = skippedCount;
                 
-                // 读取新增的行
+                // 检测日志文件是否被轮转（跳过的行数少于预期）
+                if (currentLine < fromLine) {
+                    fileRotated = true;
+                }
+                
+                // 读取新增的行（限制最大行数）
                 while ((line = reader.readLine()) != null && newLinesList.size() < maxIncrementalLines) {
                     newLinesList.add(line);
-                    totalLines++;
+                    currentLine++;
                 }
                 
-                // 继续统计剩余行数（如果有）
+                // 如果还有更多行，继续计数但不读取内容
                 while (reader.readLine() != null) {
-                    totalLines++;
+                    currentLine++;
                 }
             }
             
-            // 检测日志文件是否被轮转（文件行数减少）
-            if (totalLines < fromLine && fromLine > 0) {
+            int totalLines = currentLine;
+            
+            // 检测日志文件是否被轮转
+            if (fileRotated) {
                 result.put("success", true);
                 result.put("fileName", fileName);
                 result.put("content", "");
@@ -432,8 +436,8 @@ public class FileReadService {
                 return result;
             }
             
-            // 如果文件行数没有增加，返回空内容
-            if (totalLines <= fromLine) {
+            // 如果没有新增内容
+            if (newLinesList.isEmpty()) {
                 result.put("success", true);
                 result.put("fileName", fileName);
                 result.put("content", "");
@@ -449,27 +453,17 @@ public class FileReadService {
                 return result;
             }
             
-            // 如果新增行数超过限制，只保留最后maxIncrementalLines行
-            int newLinesCount = totalLines - fromLine;
-            if (newLinesCount > maxIncrementalLines) {
-                // 只保留最后maxIncrementalLines行
-                newLinesList = newLinesList.subList(Math.max(0, newLinesList.size() - maxIncrementalLines), newLinesList.size());
-                newLinesCount = maxIncrementalLines;
-                result.put("warning", String.format("新增行数过多，只读取最后 %d 行", maxIncrementalLines));
-            }
+            int newLinesCount = newLinesList.size();
             
-            // 构建新增内容
-            StringBuilder newContent = new StringBuilder();
-            for (int i = 0; i < newLinesList.size(); i++) {
-                newContent.append(newLinesList.get(i));
-                if (i < newLinesList.size() - 1) {
-                    newContent.append("\n");
-                }
+            // 构建新增内容（使用 StringJoiner 提高性能）
+            java.util.StringJoiner joiner = new java.util.StringJoiner("\n");
+            for (String l : newLinesList) {
+                joiner.add(l);
             }
             
             result.put("success", true);
             result.put("fileName", fileName);
-            result.put("content", newContent.toString());
+            result.put("content", joiner.toString());
             result.put("totalLines", totalLines);
             result.put("fromLine", fromLine);
             result.put("newLines", newLinesCount);

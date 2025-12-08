@@ -155,13 +155,13 @@ public class BuildTaskService {
 
                 int exitCode = process.waitFor();
 
-                // 更新任务状态
+                // 更新任务状态和日志文件路径
                 if (exitCode == 0) {
                     logger.info("构建成功: {}, 版本: {}", appCode, targetVersion);
-                    verMgtService.updateStatus(appCode, "0", targetVersion);
+                    verMgtService.updateStatusAndLogFile(appCode, "0", targetVersion, logFilePath);
                 } else {
                     logger.warn("构建失败: {}, 版本: {}, 退出码: {}", appCode, targetVersion, exitCode);
-                    verMgtService.updateStatus(appCode, "0", null);
+                    verMgtService.updateStatusAndLogFile(appCode, "0", null, logFilePath);
                 }
 
             } catch (Exception e) {
