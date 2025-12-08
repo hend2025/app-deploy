@@ -146,15 +146,25 @@ export default {
       if (item.isDirectory) {
         loadDirectory(item.path)
       } else {
+        // 切换文件时先停止之前的自动刷新
+        if (autoRefreshInterval) {
+          clearInterval(autoRefreshInterval)
+          autoRefreshInterval = null
+          autoRefreshEnabled.value = false
+        }
+        
         // 选择文件并加载日志
         selectedFile.value = item.path
         selectedFileName.value = item.name
         logLineCount.value = 0
         logContentText.value = '加载中...'
         loadLogContent()
-        if (!autoRefreshEnabled.value) {
-          setTimeout(() => toggleAutoRefresh(), 1000)
-        }
+        // 延迟启动自动刷新
+        setTimeout(() => {
+          if (selectedFile.value === item.path && !autoRefreshEnabled.value) {
+            toggleAutoRefresh()
+          }
+        }, 1000)
       }
     }
 

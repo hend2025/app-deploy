@@ -20,6 +20,14 @@ public class FileReadService {
 
     @Value("${app.directory.logs:/home/logs}")
     private String logsDir;
+    
+    // 预编译正则表达式，避免每次调用时重复编译
+    private static final java.util.regex.Pattern PATTERN_VERSION_TIMESTAMP = 
+        java.util.regex.Pattern.compile("^(.+)-(\\d+\\.\\d+\\.\\d+)_(\\d{8}_\\d{6})$");
+    private static final java.util.regex.Pattern PATTERN_OTHER_VERSION = 
+        java.util.regex.Pattern.compile("^(.+)-([^_]+)_(\\d{8}_\\d{6})$");
+    private static final java.util.regex.Pattern PATTERN_NO_VERSION = 
+        java.util.regex.Pattern.compile("^(.+)_(\\d{8}_\\d{6})$");
 
     /**
      * 获取日志文件列表
@@ -139,7 +147,7 @@ public class FileReadService {
     }
     
     /**
-     * 从文件名中提取应用名和版本号
+     * 从文件名中提取应用名和版本号（使用预编译的正则表达式提高性能）
      */
     private AppVersionInfo extractAppAndVersion(String fileName) {
         // 移除.log后缀
@@ -147,25 +155,19 @@ public class FileReadService {
         
         // 尝试匹配格式：appCode-version_timestamp
         // 例如：medical-platform-1.0.0_20241010_123456.log
-        java.util.regex.Pattern pattern1 = java.util.regex.Pattern.compile("^(.+)-(\\d+\\.\\d+\\.\\d+)_(\\d{8}_\\d{6})$");
-        java.util.regex.Matcher matcher = pattern1.matcher(nameWithoutExt);
-        
+        java.util.regex.Matcher matcher = PATTERN_VERSION_TIMESTAMP.matcher(nameWithoutExt);
         if (matcher.matches()) {
             return new AppVersionInfo(matcher.group(1), matcher.group(2));
         }
         
         // 尝试匹配格式：appCode-version_timestamp（其他版本格式）
-        java.util.regex.Pattern pattern2 = java.util.regex.Pattern.compile("^(.+)-([^_]+)_(\\d{8}_\\d{6})$");
-        matcher = pattern2.matcher(nameWithoutExt);
-        
+        matcher = PATTERN_OTHER_VERSION.matcher(nameWithoutExt);
         if (matcher.matches()) {
             return new AppVersionInfo(matcher.group(1), matcher.group(2));
         }
         
         // 尝试匹配格式：appCode_timestamp（无版本号）
-        java.util.regex.Pattern pattern3 = java.util.regex.Pattern.compile("^(.+)_(\\d{8}_\\d{6})$");
-        matcher = pattern3.matcher(nameWithoutExt);
-        
+        matcher = PATTERN_NO_VERSION.matcher(nameWithoutExt);
         if (matcher.matches()) {
             return new AppVersionInfo(matcher.group(1), "no-version");
         }

@@ -54,14 +54,14 @@ public class VerMgtService {
     }
 
     /**
-     * 重置所有状态为就绪
+     * 重置所有状态为就绪（使用批量更新提高性能）
      */
     private void resetAllStatus() {
-        List<VerInfo> all = verInfoMapper.selectList(null);
-        for (VerInfo ver : all) {
-            ver.setStatus("0");
-            verInfoMapper.updateById(ver);
-        }
+        // 使用 LambdaUpdateWrapper 批量更新，避免逐条更新
+        com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<VerInfo> updateWrapper = 
+            new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<>();
+        updateWrapper.set(VerInfo::getStatus, "0");
+        verInfoMapper.update(null, updateWrapper);
     }
 
     /**

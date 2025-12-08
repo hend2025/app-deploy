@@ -3,7 +3,7 @@
     <el-card>
       <!-- 搜索区域 -->
       <el-row :gutter="20" style="margin-bottom: 15px;">
-        <el-col :span="16">
+        <el-col :span="12">
           <el-input
             v-model="searchText"
             placeholder="输入应用名称搜索..."
@@ -17,13 +17,24 @@
             </template>
           </el-input>
         </el-col>
-        <el-col :span="8" style="text-align: right;">
+        <el-col :span="12" style="text-align: right;">
           <el-button type="primary" size="large" @click="addApp">新增</el-button>
+          <el-button type="warning" size="large" :disabled="!selectedRow" @click="editApp(selectedRow)">修改</el-button>
+          <el-button type="danger" size="large" :disabled="!selectedRow" @click="deleteApp(selectedRow)">删除</el-button>
         </el-col>
       </el-row>
 
       <!-- 应用列表 -->
-      <el-table :data="sortedAppList" v-loading="loading" stripe border size="large">
+      <el-table 
+        :data="sortedAppList" 
+        v-loading="loading" 
+        stripe 
+        border 
+        size="large"
+        highlight-current-row
+        @current-change="handleCurrentChange"
+      >
+        <el-table-column type="index" width="70" label="序号" align="center" />
         <el-table-column prop="appCode" label="应用名称" min-width="150">
           <template #default="{ row }">
             <strong>{{ row.appCode }}</strong>
@@ -34,7 +45,7 @@
             <el-tag type="primary">{{ row.version || '-' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="80">
+        <el-table-column prop="status" label="状态" width="80" align="center">
           <template #default="{ row }">
             <el-tag :type="row.status === '2' ? 'success' : ''">
               {{ getStatusText(row.status) }}
@@ -44,14 +55,12 @@
         <el-table-column prop="updateTime" label="更新时间" width="160">
           <template #default="{ row }">{{ formatDateTime(row.updateTime) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="365" align="center">
+        <el-table-column label="操作" width="220" align="center">
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button type="primary" size="small" :disabled="!!row.pid" @click="startApp(row)">启动</el-button>
               <el-button type="danger" size="small" :disabled="!row.pid" @click="stopApp(row)">停止</el-button>
               <el-button size="small" @click="viewLogs(row)">日志</el-button>
-              <el-button type="warning" size="small" @click="editApp(row)">修改</el-button>
-              <el-button type="danger" size="small" @click="deleteApp(row)">删除</el-button>
             </div>
           </template>
         </el-table-column>
@@ -163,6 +172,11 @@ export default {
     const isEdit = ref(false)
     const editForm = ref({ appCode: '', version: '', params: '', logFile: '' })
     const logModal = ref(null)
+    const selectedRow = ref(null)
+
+    const handleCurrentChange = (row) => {
+      selectedRow.value = row
+    }
 
     const defaultParams = `-Xmx1048m
 -Xms512m
@@ -243,8 +257,7 @@ export default {
         ElMessage.warning('该应用暂无日志文件')
         return
       }
-      const fileName = app.logFile.split(/[/\\]/).pop()
-      logModal.value.showLog(fileName)
+      logModal.value.showLog(app.logFile)
     }
 
     const getStatusText = (status) => {
@@ -264,6 +277,10 @@ export default {
     }
 
     const editApp = (row) => {
+      if (!row) {
+        ElMessage.warning('请先选择要修改的记录')
+        return
+      }
       isEdit.value = true
       editForm.value = { 
         appCode: row.appCode, 
@@ -290,6 +307,10 @@ export default {
     }
 
     const deleteApp = async (row) => {
+      if (!row) {
+        ElMessage.warning('请先选择要删除的记录')
+        return
+      }
       try {
         await ElMessageBox.confirm(
           `确定要删除应用 "${row.appCode}" 吗？`,
@@ -298,6 +319,7 @@ export default {
         )
         await appMgtApi.deleteApp({ appCode: row.appCode })
         ElMessage.success('删除成功')
+        selectedRow.value = null
         searchApps()
       } catch (error) {
         if (error !== 'cancel') {
@@ -312,7 +334,7 @@ export default {
     return {
       searchText, appList, loading, currentApp, startForm,
       startDialogVisible, stopDialogVisible, sortedAppList,
-      editDialogVisible, isEdit, editForm,
+      editDialogVisible, isEdit, editForm, selectedRow, handleCurrentChange,
       searchApps, startApp, confirmStart, stopApp, confirmStop,
       viewLogs, getStatusText, formatDateTime, addApp, editApp, saveApp, deleteApp, logModal
     }
@@ -350,5 +372,11 @@ export default {
 .action-buttons .el-button {
   margin: 0;
   min-width: 60px;
+}
+:deep(.el-table__body tr.current-row > td.el-table__cell) {
+  background-color: #d9ecff !important;
+}
+:deep(.el-table__body tr.current-row) {
+  font-weight: 500;
 }
 </style>

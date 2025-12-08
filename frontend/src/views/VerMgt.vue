@@ -3,7 +3,7 @@
     <el-card>
       <!-- 搜索区域 -->
       <el-row :gutter="20" style="margin-bottom: 15px;">
-        <el-col :span="16">
+        <el-col :span="12">
           <el-input
             v-model="searchTerm"
             placeholder="输入应用名称搜索..."
@@ -17,24 +17,35 @@
             </template>
           </el-input>
         </el-col>
-        <el-col :span="8" style="text-align: right;">
+        <el-col :span="12" style="text-align: right;">
           <el-button type="primary" size="large" @click="addVersion">新增</el-button>
+          <el-button type="warning" size="large" :disabled="!selectedRow" @click="editVersion(selectedRow)">修改</el-button>
+          <el-button type="danger" size="large" :disabled="!selectedRow" @click="deleteVersion(selectedRow)">删除</el-button>
         </el-col>
       </el-row>
 
       <!-- 版本列表 -->
-      <el-table :data="sortedVersionList" v-loading="loading" stripe border size="large">
-        <el-table-column prop="appCode" label="应用编码" width="220">
+      <el-table 
+        :data="sortedVersionList" 
+        v-loading="loading" 
+        stripe 
+        border 
+        size="large"
+        highlight-current-row
+        @current-change="handleCurrentChange"
+      >
+        <el-table-column type="index" width="70" label="序号" align="center" />
+        <el-table-column prop="appCode" label="应用编码" width="200">
           <template #default="{ row }">
             <strong>{{ row.appCode }}</strong>
           </template>
         </el-table-column>
-        <el-table-column prop="appName" label="应用名称" min-width="250">
+        <el-table-column prop="appName" label="应用名称" min-width="220">
           <template #default="{ row }">
             <strong>{{ row.appName }}</strong>
           </template>
         </el-table-column>
-        <el-table-column prop="version" label="版本号" width="180">
+        <el-table-column prop="version" label="版本号" width="150">
           <template #default="{ row }">
             <el-tag type="primary">{{ row.version }}</el-tag>
           </template>
@@ -42,14 +53,12 @@
         <el-table-column prop="updateTime" label="更新时间" width="160">
           <template #default="{ row }">{{ formatDateTime(row.updateTime) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="365" align="center">
+        <el-table-column label="操作" width="220" align="center">
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button type="primary" size="small" :disabled="row.status !== '0'" @click="buildApp(row)">构建</el-button>
               <el-button type="danger" size="small" :disabled="row.status !== '1'" @click="stopApp(row)">停止</el-button>
               <el-button size="small" @click="viewLogs(row)">日志</el-button>
-              <el-button type="warning" size="small" @click="editVersion(row)">修改</el-button>
-              <el-button type="danger" size="small" @click="deleteVersion(row)">删除</el-button>
             </div>
           </template>
         </el-table-column>
@@ -130,8 +139,11 @@ export default {
     const isEdit = ref(false)
     const editForm = ref({ appCode: '', appName: '', version: '', scriptCmd: '', scriptSh: '' })
     const logModal = ref(null)
-    
-    let autoRefreshInterval = null
+    const selectedRow = ref(null)
+
+    const handleCurrentChange = (row) => {
+      selectedRow.value = row
+    }
 
     const sortedVersionList = computed(() => {
       return [...versionList.value].sort((a, b) => {
@@ -196,8 +208,8 @@ export default {
         ElMessage.warning('该应用没有日志文件')
         return
       }
-      const fileName = version.logFile.split(/[/\\]/).pop()
-      logModal.value.showLog(fileName)
+      // 使用完整路径，让后端正确解析文件位置
+      logModal.value.showLog(version.logFile)
     }
 
     const formatDateTime = (dateTimeStr) => {
@@ -212,6 +224,10 @@ export default {
     }
 
     const editVersion = (row) => {
+      if (!row) {
+        ElMessage.warning('请先选择要修改的记录')
+        return
+      }
       isEdit.value = true
       editForm.value = { 
         appCode: row.appCode, 
@@ -239,6 +255,10 @@ export default {
     }
 
     const deleteVersion = async (row) => {
+      if (!row) {
+        ElMessage.warning('请先选择要删除的记录')
+        return
+      }
       try {
         await ElMessageBox.confirm(
           `确定要删除应用 "${row.appName || row.appCode}" 吗？`,
@@ -247,6 +267,7 @@ export default {
         )
         await verBuildApi.deleteVersion({ appCode: row.appCode })
         ElMessage.success('删除成功')
+        selectedRow.value = null
         searchVersions()
       } catch (error) {
         if (error !== 'cancel') {
@@ -264,6 +285,7 @@ export default {
     return {
       searchTerm, versionList, loading, currentVersion, buildForm,
       buildDialogVisible, sortedVersionList, editDialogVisible, isEdit, editForm,
+      selectedRow, handleCurrentChange,
       searchVersions, buildApp, confirmBuild, stopApp, viewLogs, formatDateTime, 
       addVersion, editVersion, saveVersion, deleteVersion, logModal
     }
@@ -301,5 +323,11 @@ export default {
 .action-buttons .el-button {
   margin: 0;
   min-width: 60px;
+}
+:deep(.el-table__body tr.current-row > td.el-table__cell) {
+  background-color: #d9ecff !important;
+}
+:deep(.el-table__body tr.current-row) {
+  font-weight: 500;
 }
 </style>

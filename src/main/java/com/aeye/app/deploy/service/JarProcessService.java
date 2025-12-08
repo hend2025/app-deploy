@@ -160,10 +160,14 @@ public class JarProcessService {
 
                 // 更新应用信息，不等待进程结束
                 AppInfo appInfo = appMgtService.getAppByCode(appCode);
-                appInfo.setLogFile(logFilePath);
-                appInfo.setParams(params);
-                appInfo.setVersion(version);
-                appMgtService.saveApp(appInfo);
+                if (appInfo != null) {
+                    appInfo.setLogFile(logFilePath);
+                    appInfo.setParams(params);
+                    appInfo.setVersion(version);
+                    appMgtService.saveApp(appInfo);
+                } else {
+                    logger.warn("应用信息不存在，无法更新: {}", appCode);
+                }
                 
                 logger.info("应用启动命令已执行: {}, 日志文件: {}", appCode, logFilePath);
 

@@ -274,8 +274,8 @@ public class AppMgtController {
                     result.put(appCode, pid);
                     processCache.put(appCode, new CachedProcessInfo(pid, currentTime));
                 } else {
-                    // 进程不存在，从缓存中移除
-                    processCache.remove(appCode);
+                    // 进程不存在，更新缓存为null（而不是移除，这样可以避免频繁查询）
+                    processCache.put(appCode, new CachedProcessInfo(null, currentTime));
                 }
             }
         }

@@ -30,6 +30,20 @@ public class ProcessUtil {
             }
             
             process = processBuilder.start();
+            
+            // 设置超时，避免进程挂起
+            final Process finalProcess = process;
+            java.util.concurrent.CompletableFuture<Void> timeoutFuture = java.util.concurrent.CompletableFuture.runAsync(() -> {
+                try {
+                    Thread.sleep(10000); // 10秒超时
+                    if (finalProcess.isAlive()) {
+                        finalProcess.destroyForcibly();
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            
             reader = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), charset));
             
