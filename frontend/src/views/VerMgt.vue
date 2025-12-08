@@ -35,22 +35,22 @@
         @current-change="handleCurrentChange"
       >
         <el-table-column type="index" width="70" label="序号" align="center" />
-        <el-table-column prop="appCode" label="应用编码" width="200">
+        <el-table-column prop="appCode" label="应用编码">
           <template #default="{ row }">
             <strong>{{ row.appCode }}</strong>
           </template>
         </el-table-column>
-        <el-table-column prop="appName" label="应用名称" min-width="220">
+        <el-table-column prop="appName" label="应用名称">
           <template #default="{ row }">
             <strong>{{ row.appName }}</strong>
           </template>
         </el-table-column>
-        <el-table-column prop="version" label="版本号" width="150">
+        <el-table-column prop="version" label="版本号">
           <template #default="{ row }">
             <el-tag type="primary">{{ row.version }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="updateTime" label="更新时间" width="160">
+        <el-table-column prop="updateTime" label="更新时间" width="168" align="center">
           <template #default="{ row }">{{ formatDateTime(row.updateTime) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="220" align="center">
@@ -180,14 +180,26 @@ export default {
         return
       }
       try {
-        await verBuildApi.build({
+        const response = await verBuildApi.build({
           appCode: currentVersion.value.appCode,
           appName: currentVersion.value.appName,
           targetVersion: buildForm.value.targetVersion
         })
         ElMessage.success('构建任务已启动')
         buildDialogVisible.value = false
-        setTimeout(() => searchVersions(), 1000)
+        
+        // 立即更新当前行的状态为构建中
+        const targetRow = versionList.value.find(v => v.appCode === currentVersion.value.appCode)
+        if (targetRow) {
+          targetRow.status = '1'  // 构建中
+          // 如果后端返回了日志文件路径，更新它
+          if (response && response.logFile) {
+            targetRow.logFile = response.logFile
+          }
+        }
+        
+        // 延迟刷新列表获取最新状态
+        setTimeout(() => searchVersions(), 3000)
       } catch (error) {
         ElMessage.error('启动构建失败: ' + error.message)
       }

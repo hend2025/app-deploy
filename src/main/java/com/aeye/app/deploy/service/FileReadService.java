@@ -190,27 +190,54 @@ public class FileReadService {
     }
     
     /**
+     * 统一解析文件路径
+     * 处理以下情况：
+     * 1. classpath路径
+     * 2. Linux风格绝对路径（在Windows上转换为D盘路径）
+     * 3. Windows绝对路径
+     * 4. 相对路径（拼接logsDir）
+     */
+    private File resolveFilePath(String fileName) throws Exception {
+        // 判断是否为classpath路径
+        if (logsDir.startsWith("classpath:")) {
+            String classpathPath = logsDir.substring("classpath:".length());
+            return ResourceUtils.getFile("classpath:" + classpathPath + "/" + fileName);
+        }
+        
+        // 处理文件名中的路径
+        String resolvedPath = fileName;
+        
+        // 检测是否为Linux风格的绝对路径（以/开头但不是Windows路径）
+        boolean isLinuxAbsolutePath = fileName.startsWith("/") && 
+            (fileName.length() < 2 || fileName.charAt(1) != ':');
+        
+        // 检测当前操作系统
+        boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
+        
+        if (isLinuxAbsolutePath && isWindows) {
+            // 在Windows上，将Linux路径转换为D盘路径
+            // /home/logs/xxx.log -> D:/home/logs/xxx.log
+            resolvedPath = "D:" + fileName.replace('/', '\\');
+        }
+        
+        File tempFile = new File(resolvedPath);
+        
+        // 判断是否为绝对路径
+        if (tempFile.isAbsolute()) {
+            return tempFile;
+        }
+        
+        // 相对路径，拼接 logsDir
+        return new File(logsDir, fileName);
+    }
+    
+    /**
      * 读取指定文件
      */
     public Map<String, Object> readFile(String fileName) {
         Map<String, Object> result = new HashMap<>();
         try {
-            File file;
-            // 判断是否为classpath路径
-            if (logsDir.startsWith("classpath:")) {
-                String classpathPath = logsDir.substring("classpath:".length());
-                file = ResourceUtils.getFile("classpath:" + classpathPath + "/" + fileName);
-            } else {
-                // 判断 fileName 是否为绝对路径
-                File tempFile = new File(fileName);
-                if (tempFile.isAbsolute()) {
-                    // 如果是绝对路径，直接使用
-                    file = tempFile;
-                } else {
-                    // 如果是相对路径，拼接 logsDir
-                    file = new File(logsDir, fileName);
-                }
-            }
+            File file = resolveFilePath(fileName);
             
             if (!file.exists()) {
                 result.put("success", false);
@@ -270,22 +297,7 @@ public class FileReadService {
     public Map<String, Object> readFileLastLines(String fileName, int lastLines) {
         Map<String, Object> result = new HashMap<>();
         try {
-            File file;
-            // 判断是否为classpath路径
-            if (logsDir.startsWith("classpath:")) {
-                String classpathPath = logsDir.substring("classpath:".length());
-                file = ResourceUtils.getFile("classpath:" + classpathPath + "/" + fileName);
-            } else {
-                // 判断 fileName 是否为绝对路径
-                File tempFile = new File(fileName);
-                if (tempFile.isAbsolute()) {
-                    // 如果是绝对路径，直接使用
-                    file = tempFile;
-                } else {
-                    // 如果是相对路径，拼接 logsDir
-                    file = new File(logsDir, fileName);
-                }
-            }
+            File file = resolveFilePath(fileName);
             
             if (!file.exists()) {
                 result.put("success", false);
@@ -357,22 +369,7 @@ public class FileReadService {
         Map<String, Object> result = new HashMap<>();
 
         try {
-            File file;
-            // 判断是否为classpath路径
-            if (logsDir.startsWith("classpath:")) {
-                String classpathPath = logsDir.substring("classpath:".length());
-                file = ResourceUtils.getFile("classpath:" + classpathPath + "/" + fileName);
-            } else {
-                // 判断 fileName 是否为绝对路径
-                File tempFile = new File(fileName);
-                if (tempFile.isAbsolute()) {
-                    // 如果是绝对路径，直接使用
-                    file = tempFile;
-                } else {
-                    // 如果是相对路径，拼接 logsDir
-                    file = new File(logsDir, fileName);
-                }
-            }
+            File file = resolveFilePath(fileName);
             
             if (!file.exists()) {
                 result.put("success", false);

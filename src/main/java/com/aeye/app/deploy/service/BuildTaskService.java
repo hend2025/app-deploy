@@ -67,12 +67,22 @@ public class BuildTaskService {
         String extension = isWindows() ? ".cmd" : ".sh";
         File scriptFile = File.createTempFile("build_" + appCode + "_", extension);
         
-        try (java.io.BufferedWriter writer = Files.newBufferedWriter(scriptFile.toPath(), StandardCharsets.UTF_8)) {
-            writer.write(processedContent);
-        }
-
-        // Linux下设置执行权限
-        if (!isWindows()) {
+        if (isWindows()) {
+            // Windows: 确保使用CRLF换行符，使用UTF-8 with BOM或GBK编码
+            // 先统一为LF，再转换为CRLF
+            processedContent = processedContent.replace("\r\n", "\n").replace("\r", "\n");
+            processedContent = processedContent.replace("\n", "\r\n");
+            
+            // 使用UTF-8编码写入（Windows 10+ 支持UTF-8）
+            try (java.io.OutputStreamWriter writer = new java.io.OutputStreamWriter(
+                    new java.io.FileOutputStream(scriptFile), StandardCharsets.UTF_8)) {
+                writer.write(processedContent);
+            }
+        } else {
+            // Linux: 使用UTF-8编码，LF换行符
+            try (java.io.BufferedWriter writer = Files.newBufferedWriter(scriptFile.toPath(), StandardCharsets.UTF_8)) {
+                writer.write(processedContent);
+            }
             scriptFile.setExecutable(true);
         }
 
@@ -81,8 +91,9 @@ public class BuildTaskService {
 
     /**
      * 启动构建任务
+     * @return 日志文件路径
      */
-    public void startBuild(VerInfo appVersion, String targetVersion) {
+    public String startBuild(VerInfo appVersion, String targetVersion) {
         String appCode = appVersion.getAppCode();
         
         // 检查是否已有构建任务在运行
@@ -112,24 +123,27 @@ public class BuildTaskService {
             throw new IllegalStateException("未配置" + osType + "构建脚本");
         }
         
+        // 预先生成日志文件路径
+        String logFileName = String.format("build_%s_%s_%s.log",
+            appVersion.getAppCode(),
+            targetVersion,
+            new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()));
+        String logFilePath = logsDir + "/" + logFileName;
+        
+        // 确保日志目录存在
+        File logDir = new File(logsDir);
+        if (!logDir.exists()) {
+            logDir.mkdirs();
+        }
+        
+        // 立即更新状态为构建中，并设置日志文件路径
+        verMgtService.updateStatusAndLogFile(appCode, "1", null, logFilePath);
+        
         executorService.submit(() -> {
             Process process = null;
             File tempScriptFile = null;
             try {
                 logger.info("开始构建任务: {}, 版本: {}", appCode, targetVersion);
-                
-                // 创建日志文件
-                String logFileName = String.format("build_%s_%s_%s.log",
-                    appVersion.getAppCode(),
-                    targetVersion,
-                    new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()));
-                String logFilePath = logsDir + "/" + logFileName;
-                
-                // 确保日志目录存在
-                File logDir = new File(logsDir);
-                if (!logDir.exists()) {
-                    logDir.mkdirs();
-                }
 
                 // 创建临时脚本文件
                 tempScriptFile = createTempScript(appCode, scriptContent, targetVersion);
@@ -138,9 +152,10 @@ public class BuildTaskService {
                 // 执行脚本
                 ProcessBuilder processBuilder = new ProcessBuilder();
                 if (isWindows()) {
-                    processBuilder.command("cmd", "/c", "chcp 65001 >nul && " + tempScriptFile.getAbsolutePath());
+                    // Windows下直接调用脚本，脚本内部已包含chcp命令
+                    processBuilder.command("cmd", "/c", tempScriptFile.getAbsolutePath(), targetVersion);
                 } else {
-                    processBuilder.command("bash", tempScriptFile.getAbsolutePath());
+                    processBuilder.command("bash", tempScriptFile.getAbsolutePath(), targetVersion);
                 }
 
                 processBuilder.redirectOutput(new File(logFilePath));
@@ -191,6 +206,9 @@ public class BuildTaskService {
                 }
             }
         });
+        
+        // 返回日志文件路径
+        return logFilePath;
     }
 
     /**

@@ -84,12 +84,13 @@ public class VerBuildController {
                 return ResponseEntity.ok(response);
             }
 
-            // 启动构建任务
-            buildTaskService.startBuild(appVersion,targetVersion);
+            // 启动构建任务，获取日志文件路径
+            String logFilePath = buildTaskService.startBuild(appVersion, targetVersion);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
             response.put("message", "构建任务已启动");
+            response.put("logFile", logFilePath);
 
             return ResponseEntity.ok(response);
 

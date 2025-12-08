@@ -35,12 +35,12 @@
         @current-change="handleCurrentChange"
       >
         <el-table-column type="index" width="70" label="序号" align="center" />
-        <el-table-column prop="appCode" label="应用名称" min-width="150">
+        <el-table-column prop="appCode" label="应用名称">
           <template #default="{ row }">
             <strong>{{ row.appCode }}</strong>
           </template>
         </el-table-column>
-        <el-table-column prop="version" label="版本号" width="150">
+        <el-table-column prop="version" label="版本号">
           <template #default="{ row }">
             <el-tag type="primary">{{ row.version || '-' }}</el-tag>
           </template>
@@ -52,7 +52,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="updateTime" label="更新时间" width="160">
+        <el-table-column prop="updateTime" label="更新时间" width="168" align="center">
           <template #default="{ row }">{{ formatDateTime(row.updateTime) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="220" align="center">
