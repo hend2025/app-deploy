@@ -8,12 +8,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PreDestroy;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStreamReader;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -27,11 +30,11 @@ public class JarProcessService {
     @Value("${app.directory.release:/home/release}")
     private String jarDir;
     
-    @Value("${app.directory.logs:/home/logs}")
-    private String logsDir;
-    
     @Autowired
     private AppMgtService appMgtService;
+    
+    @Autowired
+    private LogBufferService logBufferService;
 
     // 检测操作系统类型
     private static final String OS = System.getProperty("os.name").toLowerCase();
@@ -68,100 +71,49 @@ public class JarProcessService {
         executorService.submit(() -> {
             try {
                 logger.info("开始启动应用: {}, 版本: {}", appCode, version);
-                
-                // 生成日志文件路径：jar包名称_时间.log
-                String baseFileName = appCode+"-"+version;
-                String logFileName = String.format("%s_%s.log", baseFileName,
-                        new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()));
-                String logFilePath = logsDir + "/" + logFileName;
 
-                // 确保日志目录存在
-                File logDir = new File(logsDir);
-                if (!logDir.exists()) {
-                    logDir.mkdirs();
-                }
-
-                // 构建启动命令（跨平台兼容 - 真正的后台运行）
+                // 构建启动命令
                 ProcessBuilder processBuilder = new ProcessBuilder();
                 
                 // 解析启动参数
                 String[] jvmArgs = null;
                 if (params != null && !params.trim().isEmpty()) {
-                    // 按行分割参数
                     jvmArgs = params.split("[\\r\\n]+");
                 }
                 
                 // 构建完整的命令
                 java.util.List<String> command = new java.util.ArrayList<>();
                 
-                // 根据操作系统构建命令
-                if (IS_WINDOWS) {
-                    // Windows: 使用 start /b 创建独立后台进程
-                    command.add("cmd.exe");
-                    command.add("/c");
-                    command.add("start");
-                    command.add("/b"); // 后台运行，不创建新窗口
-                    command.add("\"" + appCode + "\""); // 窗口标题
-                    
-                    // 添加Java命令
-                    String javaCmd = getJavaCommand();
-                    command.add(javaCmd);
-                    
-                    // 添加JVM参数
-                    if (jvmArgs != null) {
-                        for (String arg : jvmArgs) {
-                            String trimmedArg = arg.trim();
-                            if (!trimmedArg.isEmpty()) {
-                                command.add(trimmedArg);
-                            }
+                // 添加Java命令
+                String javaCmd = getJavaCommand();
+                command.add(javaCmd);
+                
+                // 添加JVM参数
+                if (jvmArgs != null) {
+                    for (String arg : jvmArgs) {
+                        String trimmedArg = arg.trim();
+                        if (!trimmedArg.isEmpty()) {
+                            command.add(trimmedArg);
                         }
                     }
-                    
-                    // 添加jar文件
-                    command.add("-jar");
-                    command.add(jarFilePath);
-                } else {
-                    // Linux/Unix: 使用 nohup 创建独立进程
-                    command.add("nohup");
-                    
-                    // 添加Java命令
-                    String javaCmd = getJavaCommand();
-                    command.add(javaCmd);
-                    
-                    // 添加JVM参数
-                    if (jvmArgs != null) {
-                        for (String arg : jvmArgs) {
-                            String trimmedArg = arg.trim();
-                            if (!trimmedArg.isEmpty()) {
-                                command.add(trimmedArg);
-                            }
-                        }
-                    }
-                    
-                    // 添加jar文件
-                    command.add("-jar");
-                    command.add(jarFilePath);
                 }
+                
+                // 添加jar文件
+                command.add("-jar");
+                command.add(jarFilePath);
                 
                 processBuilder.command(command);
                 processBuilder.directory(new File(jarDir));
                 
-                // 重定向日志文件
-                File logFile = new File(logFilePath);
-                processBuilder.redirectOutput(ProcessBuilder.Redirect.appendTo(logFile));
-                processBuilder.redirectError(ProcessBuilder.Redirect.appendTo(logFile));
+                // 合并标准输出和错误输出
+                processBuilder.redirectErrorStream(true);
                 
-                // 重定向标准输入到null设备，彻底断开与父进程的输入连接
-                File nullDevice = new File(IS_WINDOWS ? "NUL" : "/dev/null");
-                processBuilder.redirectInput(ProcessBuilder.Redirect.from(nullDevice));
-                
-                // 启动进程 - 后台运行模式（类似nohup）
-                processBuilder.start();
+                // 启动进程
+                Process process = processBuilder.start();
 
-                // 更新应用信息，不等待进程结束
+                // 更新应用信息
                 AppInfo appInfo = appMgtService.getAppByCode(appCode);
                 if (appInfo != null) {
-                    appInfo.setLogFile(logFilePath);
                     appInfo.setParams(params);
                     appInfo.setVersion(version);
                     appMgtService.saveApp(appInfo);
@@ -169,13 +121,55 @@ public class JarProcessService {
                     logger.warn("应用信息不存在，无法更新: {}", appCode);
                 }
                 
-                logger.info("应用启动命令已执行: {}, 日志文件: {}", appCode, logFilePath);
+                logger.info("应用启动命令已执行: {}", appCode);
+                
+                // 异步读取进程输出并写入内存缓冲
+                readProcessOutput(process, appCode, version);
 
             } catch (Exception e) {
                 logger.error("启动应用失败: {}, 版本: {}", appCode, version, e);
+                logBufferService.addLog(appCode, version, "ERROR", "启动应用失败: " + e.getMessage(), new Date());
             }
         });
 
+    }
+    
+    /**
+     * 读取进程输出并写入内存缓冲
+     */
+    private void readProcessOutput(Process process, String appCode, String version) {
+        Thread outputReader = new Thread(() -> {
+            // Java应用输出通常是UTF-8，使用UTF-8编码读取
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    logBufferService.addLog(appCode, version, parseLogLevel(line), line, new Date());
+                }
+            } catch (Exception e) {
+                logger.error("读取进程输出失败: {}", appCode, e);
+            }
+        }, "log-reader-" + appCode);
+        outputReader.setDaemon(true);
+        outputReader.start();
+    }
+    
+    /**
+     * 解析日志级别
+     */
+    private String parseLogLevel(String logContent) {
+        if (logContent == null) {
+            return "INFO";
+        }
+        String upper = logContent.toUpperCase();
+        if (upper.contains("ERROR")) {
+            return "ERROR";
+        } else if (upper.contains("WARN")) {
+            return "WARN";
+        } else if (upper.contains("DEBUG")) {
+            return "DEBUG";
+        }
+        return "INFO";
     }
     
     /**

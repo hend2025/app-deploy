@@ -138,31 +138,39 @@ export const verBuildApi = {
   }
 }
 
-// 日志文件 API
-export const logFileApi = {
-  // 获取日志文件列表
-  getFileList() {
-    return api.get('/logs/file/log-files')
+// 日志 API（数据库存储）
+export const logApi = {
+  // 查询日志
+  query(params = {}) {
+    return api.get('/logs/db/query', { params })
   },
-  // 浏览目录
-  browseDirectory(path = '') {
-    return api.get('/logs/file/browse', { params: { path } })
+  // 查询最新日志（从数据库）
+  latest(appCode, limit = 500) {
+    return api.get('/logs/db/latest', { params: { appCode, limit } })
   },
-  // 读取文件最后N行
-  readFileLastLines(fileName, lastLines = 3000) {
-    return api.get('/logs/file/read-file-last-lines', { 
-      params: { fileName, lastLines } 
-    })
+  // 从缓冲区读取实时日志（用于应用管理和构建页面）
+  bufferLogs(appCode, limit = 1000) {
+    return api.get('/logs/db/buffer/logs', { params: { appCode, limit } })
   },
-  // 增量读取文件
-  readFileIncremental(fileName, fromLine) {
-    return api.get('/logs/file/read-file-incremental', { 
-      params: { fileName, fromLine } 
-    })
+  // 增量读取缓冲区日志（只返回 afterSeq 之后的新日志）
+  incremental(appCode, afterSeq = 0, limit = 1000) {
+    return api.get('/logs/db/buffer/incremental', { params: { appCode, afterSeq, limit } })
   },
-  // 下载文件
-  downloadFile(fileName) {
-    return `/deploy/logs/file/download-file?fileName=${encodeURIComponent(fileName)}`
+  // 分页查询日志
+  page(params = {}) {
+    return api.get('/logs/db/page', { params })
+  },
+  // 获取缓冲区状态
+  bufferStatus() {
+    return api.get('/logs/db/buffer/status')
+  },
+  // 刷新缓冲区
+  flushBuffer() {
+    return api.post('/logs/db/buffer/flush')
+  },
+  // 清理过期日志
+  cleanup() {
+    return api.post('/logs/db/cleanup')
   }
 }
 

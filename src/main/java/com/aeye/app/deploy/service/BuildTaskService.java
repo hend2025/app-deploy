@@ -4,12 +4,14 @@ import com.aeye.app.deploy.model.VerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PreDestroy;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.*;
@@ -22,12 +24,12 @@ import java.util.concurrent.TimeUnit;
 public class BuildTaskService {
     
     private static final Logger logger = LoggerFactory.getLogger(BuildTaskService.class);
-    
-    @Value("${app.directory.logs:/home/logs}")
-    private String logsDir;
 
     @Autowired
     private VerMgtService verMgtService;
+    
+    @Autowired
+    private LogBufferService logBufferService;
 
     private final Map<String, Process> cmdMap = new ConcurrentHashMap<>();
     
@@ -68,12 +70,14 @@ public class BuildTaskService {
         File scriptFile = File.createTempFile("build_" + appCode + "_", extension);
         
         if (isWindows()) {
-            // Windows: 确保使用CRLF换行符，使用UTF-8 with BOM或GBK编码
+            // Windows: 在脚本开头添加chcp 65001设置UTF-8编码
             // 先统一为LF，再转换为CRLF
             processedContent = processedContent.replace("\r\n", "\n").replace("\r", "\n");
             processedContent = processedContent.replace("\n", "\r\n");
+            // 添加UTF-8编码设置
+            processedContent = "@echo off\r\nchcp 65001 >nul\r\n" + processedContent;
             
-            // 使用UTF-8编码写入（Windows 10+ 支持UTF-8）
+            // 使用UTF-8编码写入
             try (java.io.OutputStreamWriter writer = new java.io.OutputStreamWriter(
                     new java.io.FileOutputStream(scriptFile), StandardCharsets.UTF_8)) {
                 writer.write(processedContent);
@@ -91,9 +95,8 @@ public class BuildTaskService {
 
     /**
      * 启动构建任务
-     * @return 日志文件路径
      */
-    public String startBuild(VerInfo appVersion, String targetVersion) {
+    public void startBuild(VerInfo appVersion, String targetVersion) {
         String appCode = appVersion.getAppCode();
         
         // 检查是否已有构建任务在运行
@@ -123,21 +126,12 @@ public class BuildTaskService {
             throw new IllegalStateException("未配置" + osType + "构建脚本");
         }
         
-        // 预先生成日志文件路径
-        String logFileName = String.format("build_%s_%s_%s.log",
-            appVersion.getAppCode(),
-            targetVersion,
-            new java.text.SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date()));
-        String logFilePath = logsDir + "/" + logFileName;
+        // 立即更新状态为构建中
+        verMgtService.updateStatus(appCode, "1", null);
         
-        // 确保日志目录存在
-        File logDir = new File(logsDir);
-        if (!logDir.exists()) {
-            logDir.mkdirs();
-        }
-        
-        // 立即更新状态为构建中，并设置日志文件路径
-        verMgtService.updateStatusAndLogFile(appCode, "1", null, logFilePath);
+        // 记录构建开始日志
+        logBufferService.addLog(appCode, targetVersion, "INFO", 
+            String.format("开始构建任务: %s, 目标版本: %s", appCode, targetVersion), new Date());
         
         executorService.submit(() -> {
             Process process = null;
@@ -152,35 +146,53 @@ public class BuildTaskService {
                 // 执行脚本
                 ProcessBuilder processBuilder = new ProcessBuilder();
                 if (isWindows()) {
-                    // Windows下直接调用脚本，脚本内部已包含chcp命令
                     processBuilder.command("cmd", "/c", tempScriptFile.getAbsolutePath(), targetVersion);
                 } else {
                     processBuilder.command("bash", tempScriptFile.getAbsolutePath(), targetVersion);
                 }
 
-                processBuilder.redirectOutput(new File(logFilePath));
-                processBuilder.redirectError(new File(logFilePath));
+                // 合并标准输出和错误输出
+                processBuilder.redirectErrorStream(true);
                 
                 process = processBuilder.start();
-
-                // 更新状态为构建中
-                verMgtService.updateStatus(appCode, "1", null);
-                appVersion.setLogFile(logFilePath);
                 cmdMap.put(appCode, process);
+                
+                // 读取进程输出并写入内存缓冲
+                // Maven/Java输出通常是UTF-8编码
+                final Process finalProcess = process;
+                Thread outputReader = new Thread(() -> {
+                    try (BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(finalProcess.getInputStream(), StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            logBufferService.addLog(appCode, targetVersion, parseLogLevel(line), line, new Date());
+                        }
+                    } catch (Exception e) {
+                        logger.error("读取构建输出失败: {}", appCode, e);
+                    }
+                }, "build-log-reader-" + appCode);
+                outputReader.setDaemon(true);
+                outputReader.start();
 
                 int exitCode = process.waitFor();
 
-                // 更新任务状态和日志文件路径
+                // 更新任务状态
                 if (exitCode == 0) {
                     logger.info("构建成功: {}, 版本: {}", appCode, targetVersion);
-                    verMgtService.updateStatusAndLogFile(appCode, "0", targetVersion, logFilePath);
+                    logBufferService.addLog(appCode, targetVersion, "INFO", 
+                        String.format("构建成功，退出码: %d", exitCode), new Date());
+                    verMgtService.updateStatus(appCode, "0", targetVersion);
                 } else {
                     logger.warn("构建失败: {}, 版本: {}, 退出码: {}", appCode, targetVersion, exitCode);
-                    verMgtService.updateStatusAndLogFile(appCode, "0", null, logFilePath);
+                    logBufferService.addLog(appCode, targetVersion, "ERROR", 
+                        String.format("构建失败，退出码: %d", exitCode), new Date());
+                    verMgtService.updateStatus(appCode, "0", null);
                 }
 
             } catch (Exception e) {
                 logger.error("构建任务异常: {}, 版本: {}", appCode, targetVersion, e);
+                logBufferService.addLog(appCode, targetVersion, "ERROR", 
+                    "构建任务异常: " + e.getMessage(), new Date());
                 try {
                     verMgtService.updateStatus(appCode, "0", null);
                 } catch (Exception ex) {
@@ -206,9 +218,24 @@ public class BuildTaskService {
                 }
             }
         });
-        
-        // 返回日志文件路径
-        return logFilePath;
+    }
+    
+    /**
+     * 解析日志级别
+     */
+    private String parseLogLevel(String logContent) {
+        if (logContent == null) {
+            return "INFO";
+        }
+        String upper = logContent.toUpperCase();
+        if (upper.contains("ERROR") || upper.contains("FATAL")) {
+            return "ERROR";
+        } else if (upper.contains("WARN")) {
+            return "WARN";
+        } else if (upper.contains("DEBUG")) {
+            return "DEBUG";
+        }
+        return "INFO";
     }
 
     /**

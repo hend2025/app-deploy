@@ -68,7 +68,6 @@ public class AppMgtController {
                 appMap.put("appCode", appInfo.getAppCode());
                 appMap.put("version", appInfo.getVersion());
                 appMap.put("params", appInfo.getParams());
-                appMap.put("logFile", appInfo.getLogFile());
                 
                 // 从批量获取的结果中获取进程ID
                 String pid = processStatusMap.get(appInfo.getAppCode());

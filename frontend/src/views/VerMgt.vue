@@ -121,7 +121,7 @@
 
 <script>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { verBuildApi } from '../api'
+import { verBuildApi, logApi } from '../api'
 import LogModal from '../components/LogModal.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -180,6 +180,9 @@ export default {
         return
       }
       try {
+        // 构建前先清除缓存
+        await logApi.flushBuffer()
+        
         const response = await verBuildApi.build({
           appCode: currentVersion.value.appCode,
           appName: currentVersion.value.appName,
@@ -192,10 +195,6 @@ export default {
         const targetRow = versionList.value.find(v => v.appCode === currentVersion.value.appCode)
         if (targetRow) {
           targetRow.status = '1'  // 构建中
-          // 如果后端返回了日志文件路径，更新它
-          if (response && response.logFile) {
-            targetRow.logFile = response.logFile
-          }
         }
         
         // 延迟刷新列表获取最新状态
@@ -207,21 +206,25 @@ export default {
 
     const stopApp = async (version) => {
       try {
+        await ElMessageBox.confirm(
+          `确定要停止应用 "${version.appName || version.appCode}" 的构建吗？`,
+          '停止确认',
+          { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+        )
         await verBuildApi.stop({ appCode: version.appCode })
-        ElMessage.success('停止操作已执行')
+        // 停止后立即保存日志到数据库
+        await logApi.flushBuffer()
+        ElMessage.success('停止操作已执行，日志已保存')
         searchVersions()
       } catch (error) {
-        ElMessage.error('停止操作失败: ' + error.message)
+        if (error !== 'cancel') {
+          ElMessage.error('停止操作失败: ' + error.message)
+        }
       }
     }
 
     const viewLogs = (version) => {
-      if (!version.logFile) {
-        ElMessage.warning('该应用没有日志文件')
-        return
-      }
-      // 使用完整路径，让后端正确解析文件位置
-      logModal.value.showLog(version.logFile)
+      logModal.value.showLog(version.appCode)
     }
 
     const formatDateTime = (dateTimeStr) => {

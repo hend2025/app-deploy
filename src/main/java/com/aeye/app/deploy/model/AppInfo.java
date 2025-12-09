@@ -19,8 +19,6 @@ public class AppInfo {
 
     private String params;
 
-    private String logFile;
-
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date updateTime;
 }

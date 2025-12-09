@@ -1,266 +1,240 @@
 <template>
   <div class="page-container">
-    <!-- 左侧目录树 -->
+    <!-- 左侧应用列表 -->
     <div class="left-panel">
-      <el-card class="dir-card">
-        <!-- 路径导航 -->
-        <div class="path-nav">
-          <el-button :icon="ArrowLeft" size="small" :disabled="!parentPath" @click="goToParent" />
-          <el-button :icon="ArrowRight" size="small" disabled />
-          <el-input v-model="currentPath" size="small" readonly class="path-input" />
-        </div>
-        <!-- 统计信息 -->
-        <div class="dir-stats">
-          共 {{ fileCount }} 个文件, {{ folderCount }} 个文件夹, {{ totalSize }}
-        </div>
-        <!-- 目录列表 -->
-        <div class="dir-list">
-          <!-- 返回上级 -->
-          <div v-if="parentPath" class="dir-item" @dblclick="goToParent">
-            <el-icon class="folder-icon"><Folder /></el-icon>
-            <span class="item-name">..</span>
-            <span class="item-time">-</span>
+      <el-card class="app-card">
+        <template #header>
+          <div class="card-header">
+            <span>应用列表</span>
+            <el-button type="primary" size="small" @click="refreshAppList">刷新</el-button>
           </div>
-          <!-- 目录和文件列表 -->
+        </template>
+        <div class="app-list">
           <div 
-            v-for="item in dirItems" 
-            :key="item.path" 
-            class="dir-item"
-            :class="{ 'is-selected': selectedFile === item.path && !item.isDirectory }"
-            @dblclick="handleItemDblClick(item)"
+            v-for="app in appList" 
+            :key="app.appCode" 
+            class="app-item"
+            :class="{ 'is-selected': selectedAppCode === app.appCode }"
+            @click="selectApp(app)"
           >
-            <el-icon class="folder-icon" v-if="item.isDirectory"><Folder /></el-icon>
-            <el-icon class="file-icon" v-else><Document /></el-icon>
-            <span class="item-name" :title="item.name">{{ item.name }}</span>
-            <span class="item-time">{{ item.lastModified }}</span>
+            <span class="app-name">{{ app.appCode }}</span>
+            <span class="app-version">{{ app.version || '-' }}</span>
           </div>
+          <el-empty v-if="appList.length === 0" description="暂无应用" />
+        </div>
+      </el-card>
+      
+      <!-- 缓冲区状态 -->
+      <el-card class="buffer-card">
+        <template #header>
+          <span>缓冲区状态</span>
+        </template>
+        <div class="buffer-info">
+          <p>状态: {{ bufferStatus.enabled ? '启用' : '禁用' }}</p>
+          <p>当前条数: {{ bufferStatus.currentSize }} / {{ bufferStatus.maxSize }}</p>
+          <p>刷新间隔: {{ bufferStatus.flushIntervalMinutes }} 分钟</p>
+          <el-button type="warning" size="small" @click="flushBuffer">立即刷新到数据库</el-button>
         </div>
       </el-card>
     </div>
 
     <!-- 右侧日志显示 -->
     <div class="right-panel">
-      <!-- 控制区域 -->
-      <el-card class="controls-card">
-        <el-row :gutter="10" align="middle">
-          <el-col :span="8">
-            <span class="selected-file-label">{{ selectedFileName || '请选择日志文件' }}</span>
-          </el-col>
-          <el-col :span="4">
-            <el-select v-model="maxLines" size="small" style="width: 100%;">
-              <el-option label="2000行" value="2000" />
-              <el-option label="5000行" value="5000" />
-              <el-option label="10000行" value="10000" />
+      <!-- 查询条件 -->
+      <el-card class="query-card">
+        <el-form :inline="true" size="small">
+          <el-form-item label="日志级别">
+            <el-select v-model="queryParams.logLevel" clearable placeholder="全部" style="width: 100px;">
+              <el-option label="DEBUG" value="DEBUG" />
+              <el-option label="INFO" value="INFO" />
+              <el-option label="WARN" value="WARN" />
+              <el-option label="ERROR" value="ERROR" />
             </el-select>
-          </el-col>
-          <el-col :span="12" style="text-align: right;">
-            <el-button-group>
-              <el-button :type="autoRefreshEnabled ? 'warning' : 'success'" size="small" @click="toggleAutoRefresh">
-                {{ autoRefreshEnabled ? '停止刷新' : '自动刷新' }}
-              </el-button>
-              <el-button type="success" size="small" :disabled="!selectedFile" @click="downloadCurrentLog">下载</el-button>
-              <el-button type="info" size="small" :disabled="!selectedFile" @click="scrollToBottom">到底部</el-button>
-              <el-button type="danger" size="small" :disabled="!selectedFile" @click="clearContent">清空</el-button>
-            </el-button-group>
-          </el-col>
-        </el-row>
+          </el-form-item>
+          <el-form-item label="时间范围">
+            <el-date-picker
+              v-model="dateRange"
+              type="datetimerange"
+              range-separator="至"
+              start-placeholder="开始时间"
+              end-placeholder="结束时间"
+              format="YYYY-MM-DD HH:mm:ss"
+              value-format="YYYY-MM-DD HH:mm:ss"
+              style="width: 340px;"
+            />
+          </el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="queryLogs">查询</el-button>
+            <el-button :type="autoRefresh ? 'warning' : 'success'" @click="toggleAutoRefresh">
+              {{ autoRefresh ? '停止刷新' : '自动刷新' }}
+            </el-button>
+          </el-form-item>
+        </el-form>
       </el-card>
 
-      <!-- 日志内容区域 -->
-      <el-card v-if="!selectedFile" class="log-card empty-card">
-        <el-empty description="双击左侧日志文件查看内容" />
+      <!-- 日志内容 -->
+      <el-card v-if="!selectedAppCode" class="log-card empty-card">
+        <el-empty description="请选择左侧应用查看日志" />
       </el-card>
-      <pre v-else ref="logContent" class="log-content-area">{{ formattedLogContent }}</pre>
+      <div v-else class="log-content-wrapper">
+        <div class="log-header">
+          <span>{{ selectedAppCode }} - 共 {{ logs.length }} 条日志</span>
+          <el-button size="small" @click="scrollToBottom">到底部</el-button>
+        </div>
+        <div ref="logContainer" class="log-content-area">
+          <div v-for="(log, index) in logs" :key="log.logId || index" class="log-line" :class="'log-' + (log.logLevel || 'info').toLowerCase()">
+            <span class="log-time">{{ log.logTime }}</span>
+            <span class="log-level">{{ log.logLevel }}</span>
+            <span class="log-text">{{ log.logContent }}</span>
+          </div>
+          <el-empty v-if="logs.length === 0" description="暂无日志" />
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
-import { logFileApi } from '../api'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { appMgtApi, logApi } from '../api'
 import { ElMessage } from 'element-plus'
-import { Folder, Document, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 
 export default {
   name: 'LogMgt',
-  components: { Folder, Document, ArrowLeft, ArrowRight },
   setup() {
-    // 目录相关
-    const currentPath = ref('')
-    const parentPath = ref('')
-    const dirItems = ref([])
-    const fileCount = ref(0)
-    const folderCount = ref(0)
-    const totalSize = ref('0B')
+    const appList = ref([])
+    const selectedAppCode = ref('')
+    const logs = ref([])
+    const autoRefresh = ref(false)
+    const logContainer = ref(null)
+    const bufferStatus = ref({ enabled: false, currentSize: 0, maxSize: 3000, flushIntervalMinutes: 5 })
+    const dateRange = ref(null)
+    const queryParams = ref({ logLevel: '' })
     
-    // 日志相关
-    const selectedFile = ref('')
-    const selectedFileName = ref('')
-    const maxLines = ref('2000')
-    const logContentText = ref('')
-    const logLineCount = ref(0)
-    const autoRefreshEnabled = ref(false)
-    const logContent = ref(null)
-    
-    let autoRefreshInterval = null
+    let refreshInterval = null
+    let lastSeq = 0 // 记录上次读取的最后序号
 
-    // 使用缓存避免重复计算
-    const formattedLogContent = computed(() => {
-      if (!logContentText.value) return ''
-      const maxDisplayLines = 10000
-      const lines = logContentText.value.split('\n')
-      const displayLines = lines.length > maxDisplayLines ? lines.slice(-maxDisplayLines) : lines
-      // 简化渲染：使用 pre 标签的特性，不再为每行创建 div
-      const escapeHtml = (text) => text.replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]))
-      return displayLines.map(line => escapeHtml(line)).join('\n')
-    })
-
-    // 加载目录内容
-    const loadDirectory = async (path = '') => {
+    const refreshAppList = async () => {
       try {
-        const response = await logFileApi.browseDirectory(path)
-        if (response.success) {
-          currentPath.value = response.currentPath
-          parentPath.value = response.parentPath
-          dirItems.value = response.items
-          fileCount.value = response.fileCount
-          folderCount.value = response.folderCount
-          totalSize.value = response.totalSize
-        } else {
-          ElMessage.error(response.message || '加载目录失败')
-        }
-      } catch (error) {
-        ElMessage.error('加载目录失败: ' + error.message)
+        const res = await appMgtApi.getAppList()
+        appList.value = res.data || []
+      } catch (e) {
+        ElMessage.error('获取应用列表失败')
       }
     }
 
-    // 返回上级目录
-    const goToParent = () => {
-      if (parentPath.value) {
-        loadDirectory(parentPath.value)
+    const selectApp = (app) => {
+      selectedAppCode.value = app.appCode
+      lastSeq = 0 // 切换应用时重置序号
+      logs.value = []
+      queryLogs()
+    }
+
+    // 全量查询（用于首次加载或手动查询）
+    const queryLogs = async () => {
+      if (!selectedAppCode.value) return
+      try {
+        const params = {
+          appCode: selectedAppCode.value,
+          logLevel: queryParams.value.logLevel || undefined,
+          limit: 1000
+        }
+        if (dateRange.value && dateRange.value.length === 2) {
+          params.startTime = dateRange.value[0]
+          params.endTime = dateRange.value[1]
+        }
+        const res = await logApi.query(params)
+        logs.value = (res.logs || []).reverse()
+        lastSeq = res.currentSeq || 0 // 记录当前序号
+        await nextTick()
+        scrollToBottom()
+      } catch (e) {
+        ElMessage.error('查询日志失败: ' + e.message)
       }
     }
 
-    // 双击处理
-    const handleItemDblClick = (item) => {
-      if (item.isDirectory) {
-        loadDirectory(item.path)
-      } else {
-        // 切换文件时先停止之前的自动刷新
-        if (autoRefreshInterval) {
-          clearInterval(autoRefreshInterval)
-          autoRefreshInterval = null
-          autoRefreshEnabled.value = false
-        }
-        
-        // 选择文件并加载日志
-        selectedFile.value = item.path
-        selectedFileName.value = item.name
-        logLineCount.value = 0
-        logContentText.value = '加载中...'
-        loadLogContent()
-        // 延迟启动自动刷新
-        setTimeout(() => {
-          if (selectedFile.value === item.path && !autoRefreshEnabled.value) {
-            toggleAutoRefresh()
+    // 增量查询（用于自动刷新，只获取新日志）
+    const queryLogsIncremental = async () => {
+      if (!selectedAppCode.value) return
+      try {
+        const res = await logApi.incremental(selectedAppCode.value, lastSeq, 1000)
+        const newLogs = res.logs || []
+        if (newLogs.length > 0) {
+          logs.value = [...logs.value, ...newLogs]
+          // 限制最大条数，防止内存溢出
+          const maxSize = bufferStatus.value.maxSize || 5000
+          if (logs.value.length > maxSize) {
+            logs.value = logs.value.slice(-maxSize)
           }
-        }, 1000)
-      }
-    }
-
-    // 优化：使用更高效的行数限制方法
-    const limitLogLines = (content, maxLines) => {
-      // 快速估算：如果内容长度较小，直接返回
-      if (content.length < maxLines * 50) return content
-      
-      // 从后向前查找换行符，避免分割整个字符串
-      let lineCount = 0
-      let pos = content.length
-      while (pos > 0 && lineCount < maxLines) {
-        pos = content.lastIndexOf('\n', pos - 1)
-        if (pos === -1) break
-        lineCount++
-      }
-      
-      if (lineCount >= maxLines && pos > 0) {
-        return content.substring(pos + 1)
-      }
-      return content
-    }
-
-    const loadLogContent = async () => {
-      if (!selectedFile.value) return
-      try {
-        if (logLineCount.value === 0) {
-          const response = await logFileApi.readFileLastLines(selectedFile.value, parseInt(maxLines.value))
-          logContentText.value = response.content
-          logLineCount.value = response.totalLines
-          if (response.warning) ElMessage.warning(response.warning)
+          lastSeq = res.currentSeq || lastSeq
           await nextTick()
           scrollToBottom()
-        } else {
-          const response = await logFileApi.readFileIncremental(selectedFile.value, logLineCount.value)
-          if (response.fileRotated) {
-            // 文件轮转时，重新加载内容
-            const reloadResponse = await logFileApi.readFileLastLines(selectedFile.value, parseInt(maxLines.value))
-            logContentText.value = reloadResponse.content
-            logLineCount.value = reloadResponse.totalLines
-            await nextTick()
-            scrollToBottom()
-          } else if (response.hasNewContent) {
-            // 确保新内容前有换行符
-            if (logContentText.value && !logContentText.value.endsWith('\n')) {
-              logContentText.value += '\n'
-            }
-            logContentText.value += response.content
-            logContentText.value = limitLogLines(logContentText.value, parseInt(maxLines.value))
-            logLineCount.value = response.totalLines
-            if (response.warning) ElMessage.warning(response.warning)
-            await nextTick()
-            scrollToBottom()
-          }
         }
-      } catch (error) {
-        if (logLineCount.value === 0) logContentText.value = '加载日志失败: ' + error.message
+        // 更新缓冲区状态
+        bufferStatus.value.currentSize = res.bufferSize || bufferStatus.value.currentSize
+      } catch (e) {
+        console.error('增量查询日志失败:', e.message)
       }
     }
 
     const toggleAutoRefresh = () => {
-      if (autoRefreshEnabled.value) {
-        if (autoRefreshInterval) { clearInterval(autoRefreshInterval); autoRefreshInterval = null }
-        autoRefreshEnabled.value = false
+      if (autoRefresh.value) {
+        clearInterval(refreshInterval)
+        refreshInterval = null
+        autoRefresh.value = false
       } else {
-        if (!selectedFile.value) { ElMessage.warning('请先选择日志文件'); return }
-        loadLogContent()
-        autoRefreshInterval = setInterval(loadLogContent, 3000)
-        autoRefreshEnabled.value = true
+        if (!selectedAppCode.value) {
+          ElMessage.warning('请先选择应用')
+          return
+        }
+        // 首次加载全量，之后增量刷新
+        queryLogs()
+        refreshInterval = setInterval(queryLogsIncremental, 3000)
+        autoRefresh.value = true
       }
     }
 
     const scrollToBottom = () => {
-      if (logContent.value) nextTick(() => { logContent.value.scrollTop = logContent.value.scrollHeight })
+      if (logContainer.value) {
+        nextTick(() => { logContainer.value.scrollTop = logContainer.value.scrollHeight })
+      }
     }
 
-    const clearContent = () => { logContentText.value = '' }
-
-    const downloadCurrentLog = () => {
-      if (selectedFile.value) window.open(logFileApi.downloadFile(selectedFile.value), '_blank')
+    const loadBufferStatus = async () => {
+      try {
+        const res = await logApi.bufferStatus()
+        bufferStatus.value = res
+      } catch (e) { /* ignore */ }
     }
 
-    onMounted(() => loadDirectory())
-    onUnmounted(() => { if (autoRefreshInterval) clearInterval(autoRefreshInterval) })
+    const flushBuffer = async () => {
+      try {
+        await logApi.flushBuffer()
+        ElMessage.success('缓冲区已刷新')
+        loadBufferStatus()
+        if (selectedAppCode.value) queryLogs()
+      } catch (e) {
+        ElMessage.error('刷新失败')
+      }
+    }
+
+    onMounted(() => {
+      refreshAppList()
+      loadBufferStatus()
+    })
+
+    onUnmounted(() => {
+      if (refreshInterval) clearInterval(refreshInterval)
+    })
 
     return {
-      currentPath, parentPath, dirItems, fileCount, folderCount, totalSize,
-      selectedFile, selectedFileName, maxLines, logContentText, formattedLogContent,
-      autoRefreshEnabled, logContent, ArrowLeft, ArrowRight,
-      loadDirectory, goToParent, handleItemDblClick, toggleAutoRefresh,
-      scrollToBottom, clearContent, downloadCurrentLog
+      appList, selectedAppCode, logs, autoRefresh, logContainer, bufferStatus,
+      dateRange, queryParams,
+      refreshAppList, selectApp, queryLogs, toggleAutoRefresh, scrollToBottom, flushBuffer
     }
   }
 }
 </script>
-
 
 <style scoped>
 .page-container {
@@ -272,10 +246,11 @@ export default {
   overflow: hidden;
 }
 .left-panel {
-  width: 360px;
+  width: 280px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
+  gap: 15px;
 }
 .right-panel {
   flex: 1;
@@ -284,87 +259,32 @@ export default {
   gap: 10px;
   min-width: 0;
 }
-.dir-card {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
+.app-card, .buffer-card {
   border-radius: 8px;
 }
-:deep(.dir-card .el-card__body) {
-  flex: 1;
+.card-header {
   display: flex;
-  flex-direction: column;
-  padding: 12px;
-  overflow: hidden;
+  justify-content: space-between;
+  align-items: center;
 }
-.path-nav {
-  display: flex;
-  gap: 5px;
-  margin-bottom: 8px;
-}
-.path-input {
-  flex: 1;
-}
-.dir-stats {
-  font-size: 12px;
-  color: #909399;
-  padding: 5px 0;
-  border-bottom: 1px solid #ebeef5;
-  margin-bottom: 8px;
-}
-.dir-list {
-  flex: 1;
+.app-list {
+  max-height: 400px;
   overflow-y: auto;
 }
-.dir-item {
+.app-item {
   display: flex;
-  align-items: center;
-  padding: 8px 10px;
+  justify-content: space-between;
+  padding: 10px;
   cursor: pointer;
   border-radius: 4px;
   transition: background-color 0.2s;
 }
-.dir-item:hover {
-  background-color: #f5f7fa;
-}
-.dir-item.is-selected {
-  background-color: #ecf5ff;
-}
-.folder-icon {
-  color: #e6a23c;
-  font-size: 18px;
-  margin-right: 8px;
-}
-.file-icon {
-  color: #909399;
-  font-size: 18px;
-  margin-right: 8px;
-}
-.item-name {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-}
-.item-time {
-  font-size: 12px;
-  color: #909399;
-  margin-left: 10px;
-  white-space: nowrap;
-}
-.controls-card {
-  flex-shrink: 0;
-  border-radius: 8px;
-}
-.selected-file-label {
-  font-size: 13px;
-  color: #606266;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  display: block;
-}
+.app-item:hover { background-color: #f5f7fa; }
+.app-item.is-selected { background-color: #ecf5ff; }
+.app-name { font-weight: 500; }
+.app-version { color: #909399; font-size: 12px; }
+.buffer-info p { margin: 5px 0; font-size: 13px; color: #606266; }
+.query-card { flex-shrink: 0; border-radius: 8px; }
 .log-card.empty-card {
   flex: 1;
   display: flex;
@@ -372,20 +292,46 @@ export default {
   justify-content: center;
   border-radius: 8px;
 }
+.log-content-wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border-radius: 8px;
+  border: 1px solid #e4e7ed;
+  overflow: hidden;
+}
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 15px;
+  border-bottom: 1px solid #e4e7ed;
+  background: #fafafa;
+}
 .log-content-area {
   flex: 1;
   overflow-y: auto;
-  overflow-x: hidden;
-  background-color: #fff;
-  padding: 15px;
-  margin: 0;
-  border: 1px solid #e4e7ed;
-  border-radius: 8px;
+  padding: 10px;
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 13px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.05);
 }
+.log-line {
+  padding: 4px 8px;
+  border-radius: 3px;
+  margin-bottom: 2px;
+  display: flex;
+  gap: 10px;
+}
+.log-time { color: #909399; white-space: nowrap; }
+.log-level { font-weight: 600; width: 50px; }
+.log-text { flex: 1; word-break: break-all; }
+.log-debug { background: #f4f4f5; }
+.log-debug .log-level { color: #909399; }
+.log-info { background: #f0f9eb; }
+.log-info .log-level { color: #67c23a; }
+.log-warn { background: #fdf6ec; }
+.log-warn .log-level { color: #e6a23c; }
+.log-error { background: #fef0f0; }
+.log-error .log-level { color: #f56c6c; }
 </style>

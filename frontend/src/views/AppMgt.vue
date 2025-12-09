@@ -136,9 +136,6 @@
         <el-form-item label="启动参数">
           <el-input v-model="editForm.params" type="textarea" :rows="10" placeholder="启动参数，每行一个" style="font-family: monospace;" />
         </el-form-item>
-        <el-form-item label="日志文件">
-          <el-input v-model="editForm.logFile" placeholder="日志文件路径" />
-        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
@@ -170,7 +167,7 @@ export default {
     const startForm = ref({ version: '', params: '' })
     const editDialogVisible = ref(false)
     const isEdit = ref(false)
-    const editForm = ref({ appCode: '', version: '', params: '', logFile: '' })
+    const editForm = ref({ appCode: '', version: '', params: '' })
     const logModal = ref(null)
     const selectedRow = ref(null)
 
@@ -253,11 +250,7 @@ export default {
     }
 
     const viewLogs = (app) => {
-      if (!app.logFile) {
-        ElMessage.warning('该应用暂无日志文件')
-        return
-      }
-      logModal.value.showLog(app.logFile)
+      logModal.value.showLog(app.appCode)
     }
 
     const getStatusText = (status) => {
@@ -272,7 +265,7 @@ export default {
 
     const addApp = () => {
       isEdit.value = false
-      editForm.value = { appCode: '', version: '', params: defaultParams, logFile: '' }
+      editForm.value = { appCode: '', version: '', params: defaultParams }
       editDialogVisible.value = true
     }
 
@@ -285,8 +278,7 @@ export default {
       editForm.value = { 
         appCode: row.appCode, 
         version: row.version || '', 
-        params: row.params || defaultParams, 
-        logFile: row.logFile || '' 
+        params: row.params || defaultParams
       }
       editDialogVisible.value = true
     }

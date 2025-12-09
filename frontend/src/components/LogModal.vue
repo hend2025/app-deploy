@@ -1,16 +1,18 @@
 <template>
   <el-dialog
     v-model="visible"
-    :title="'日志详情 - ' + currentLogFile"
+    :title="'日志详情 - ' + currentAppCode"
     fullscreen
     :close-on-click-modal="false"
     @close="handleClose"
   >
-    <div 
-      ref="logContent"
-      class="log-content"
-    >
-      {{ logContentText }}
+    <div ref="logContent" class="log-content">
+      <div v-for="(log, index) in logs" :key="index" class="log-line" :class="'log-' + (log.logLevel || 'info').toLowerCase()">
+        <span class="log-time">{{ log.logTime }}</span>
+        <span class="log-level">{{ log.logLevel }}</span>
+        <span class="log-text">{{ log.logContent }}</span>
+      </div>
+      <div v-if="logs.length === 0" class="empty-tip">暂无日志</div>
     </div>
     <template #footer>
       <div class="dialog-footer">
@@ -23,7 +25,6 @@
         </el-button>
         <el-button type="info" size="small" @click="scrollToBottom">到底部</el-button>
         <el-button type="warning" size="small" @click="clearLogContent">清空</el-button>
-        <el-button type="primary" size="small" @click="downloadLog">下载</el-button>
         <el-button size="small" @click="visible = false">关闭</el-button>
       </div>
     </template>
@@ -32,36 +33,31 @@
 
 <script>
 import { ref, onUnmounted, nextTick } from 'vue'
-import { logFileApi } from '../api'
-import { ElMessage } from 'element-plus'
+import { logApi } from '../api'
 
 export default {
   name: 'LogModal',
   setup() {
     const visible = ref(false)
-    const currentLogFile = ref('')
-    const logContentText = ref('加载中...')
-    const logLineCount = ref(0)
+    const currentAppCode = ref('')
+    const logs = ref([])
     const autoRefreshEnabled = ref(false)
     const logContent = ref(null)
     
     let autoRefreshInterval = null
 
-    const showLog = (fileName) => {
-      // 先清理之前可能存在的定时器
+    const showLog = (appCode) => {
       if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval)
         autoRefreshInterval = null
       }
       autoRefreshEnabled.value = false
       
-      currentLogFile.value = fileName
-      logLineCount.value = 0
-      logContentText.value = '加载中...'
+      currentAppCode.value = appCode
+      logs.value = []
       visible.value = true
       refreshLogContent()
       
-      // 延迟启动自动刷新
       setTimeout(() => {
         if (visible.value && !autoRefreshEnabled.value) {
           toggleAutoRefresh()
@@ -69,60 +65,15 @@ export default {
       }, 2000)
     }
 
-    // 优化：使用更高效的行数限制方法
-    const limitLogLines = (content, maxLines) => {
-      // 快速估算：如果内容长度较小，直接返回
-      if (content.length < maxLines * 50) return content
-      
-      // 从后向前查找换行符，避免分割整个字符串
-      let lineCount = 0
-      let pos = content.length
-      while (pos > 0 && lineCount < maxLines) {
-        pos = content.lastIndexOf('\n', pos - 1)
-        if (pos === -1) break
-        lineCount++
-      }
-      
-      if (lineCount >= maxLines && pos > 0) {
-        return content.substring(pos + 1)
-      }
-      return content
-    }
-
     const refreshLogContent = async () => {
       try {
-        if (logLineCount.value === 0) {
-          const response = await logFileApi.readFileLastLines(currentLogFile.value, 2000)
-          logContentText.value = response.content
-          logLineCount.value = response.totalLines
-          if (response.warning) ElMessage.warning(response.warning)
-          await nextTick()
-          scrollToBottom()
-        } else {
-          const response = await logFileApi.readFileIncremental(currentLogFile.value, logLineCount.value)
-          if (response.fileRotated) {
-            // 文件轮转时，重新加载内容
-            const reloadResponse = await logFileApi.readFileLastLines(currentLogFile.value, 2000)
-            logContentText.value = reloadResponse.content
-            logLineCount.value = reloadResponse.totalLines
-            await nextTick()
-            scrollToBottom()
-          } else if (response.hasNewContent) {
-            // 确保新内容前有换行符
-            if (logContentText.value && !logContentText.value.endsWith('\n')) {
-              logContentText.value += '\n'
-            }
-            logContentText.value += response.content
-            logContentText.value = limitLogLines(logContentText.value, 2000)
-            logLineCount.value = response.totalLines
-            await nextTick()
-            scrollToBottom()
-          }
-        }
+        // 从缓冲区读取实时日志
+        const response = await logApi.bufferLogs(currentAppCode.value, 1000)
+        logs.value = response.logs || []
+        await nextTick()
+        scrollToBottom()
       } catch (error) {
-        if (logLineCount.value === 0) {
-          logContentText.value = '加载日志失败: ' + error.message
-        }
+        console.error('加载日志失败:', error)
       }
     }
 
@@ -142,21 +93,11 @@ export default {
 
     const scrollToBottom = () => {
       if (logContent.value) {
-        nextTick(() => {
-          logContent.value.scrollTop = logContent.value.scrollHeight
-        })
+        nextTick(() => { logContent.value.scrollTop = logContent.value.scrollHeight })
       }
     }
 
-    const clearLogContent = () => {
-      logContentText.value = ''
-    }
-
-    const downloadLog = () => {
-      if (currentLogFile.value) {
-        window.open(logFileApi.downloadFile(currentLogFile.value), '_blank')
-      }
-    }
+    const clearLogContent = () => { logs.value = [] }
 
     const handleClose = () => {
       if (autoRefreshInterval) {
@@ -164,8 +105,7 @@ export default {
         autoRefreshInterval = null
       }
       autoRefreshEnabled.value = false
-      logContentText.value = ''
-      logLineCount.value = 0
+      logs.value = []
     }
 
     onUnmounted(() => {
@@ -173,17 +113,8 @@ export default {
     })
 
     return {
-      visible,
-      currentLogFile,
-      logContentText,
-      autoRefreshEnabled,
-      logContent,
-      showLog,
-      toggleAutoRefresh,
-      scrollToBottom,
-      clearLogContent,
-      downloadLog,
-      handleClose
+      visible, currentAppCode, logs, autoRefreshEnabled, logContent,
+      showLog, toggleAutoRefresh, scrollToBottom, clearLogContent, handleClose
     }
   }
 }
@@ -193,20 +124,31 @@ export default {
 .log-content {
   height: calc(100vh - 180px);
   overflow-y: auto;
-  overflow-x: hidden;
-  background-color: #f5f7fa;
-  padding: 15px;
+  background-color: #fff;
+  padding: 10px;
   border: 1px solid #dcdfe6;
   border-radius: 4px;
-  font-family: monospace;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  font-size: 14px;
-  line-height: 1.4;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
 }
-.dialog-footer {
+.log-line {
+  padding: 4px 8px;
+  border-radius: 3px;
+  margin-bottom: 2px;
   display: flex;
-  gap: 8px;
-  justify-content: flex-end;
+  gap: 10px;
 }
+.log-time { color: #909399; white-space: nowrap; }
+.log-level { font-weight: 600; width: 50px; }
+.log-text { flex: 1; word-break: break-all; }
+.log-debug { background: #f4f4f5; }
+.log-debug .log-level { color: #909399; }
+.log-info { background: #f0f9eb; }
+.log-info .log-level { color: #67c23a; }
+.log-warn { background: #fdf6ec; }
+.log-warn .log-level { color: #e6a23c; }
+.log-error { background: #fef0f0; }
+.log-error .log-level { color: #f56c6c; }
+.empty-tip { text-align: center; color: #909399; padding: 50px; }
+.dialog-footer { display: flex; gap: 8px; justify-content: flex-end; }
 </style>
