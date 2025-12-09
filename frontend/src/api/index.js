@@ -187,14 +187,6 @@ export const verBuildApi = {
  * 提供日志查询接口
  */
 export const logApi = {
-  /**
-   * 获取缓冲区日志（首次加载）
-   * @param {string} appCode - 应用编码
-   * @param {number} limit - 最大返回条数
-   */
-  bufferLogs(appCode, limit = 1000) {
-    return api.get('/logs/buffer', { params: { appCode, limit } })
-  },
 
   /**
    * 增量读取日志

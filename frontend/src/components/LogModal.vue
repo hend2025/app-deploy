@@ -1,12 +1,3 @@
-<!--
-  日志查看模态框组件
-  
-  功能：
-  - 全屏显示应用日志
-  - 支持自动刷新（增量拉取新日志）
-  - 按日志级别高亮显示（DEBUG/INFO/WARN/ERROR）
-  - 自动滚动到底部
--->
 <template>
   <el-dialog
     v-model="visible"
@@ -15,7 +6,6 @@
     :show-close="false"
     @close="handleClose"
   >
-    <!-- 自定义头部：标题 + 操作按钮 -->
     <template #header>
       <div class="dialog-header">
         <span class="dialog-title">日志详情 - {{ currentAppCode }}</span>
@@ -33,7 +23,6 @@
         </div>
       </div>
     </template>
-    <!-- 日志内容区域 -->
     <div ref="logContent" class="log-content">
       <div v-for="(log, index) in logs" :key="index" class="log-line" :class="'log-' + (log.logLevel || 'info').toLowerCase()">
         <span class="log-time">{{ log.logTime }}</span>
@@ -79,33 +68,14 @@ export default {
       currentAppCode.value = appCode
       logs.value = []
       visible.value = true
-      loadInitialLogs()
+      fetchIncrementalLogs()
       
-      // 2秒后自动开启刷新
+      // 3秒后自动开启刷新
       setTimeout(() => {
         if (visible.value && !autoRefreshEnabled.value) {
           toggleAutoRefresh()
         }
-      }, 2000)
-    }
-
-    /**
-     * 首次加载日志（全量）
-     */
-    const loadInitialLogs = async () => {
-      try {
-        const response = await logApi.bufferLogs(currentAppCode.value, 1000)
-        const logList = response.logs || []
-        logs.value = logList
-        // 记录最后一条日志的序号
-        if (logList.length > 0) {
-          lastSeq = logList[logList.length - 1].seq || 0
-        }
-        await nextTick()
-        scrollToBottom()
-      } catch (error) {
-        console.error('加载日志失败:', error)
-      }
+      }, 3000)
     }
 
     /**
@@ -114,15 +84,11 @@ export default {
      */
     const fetchIncrementalLogs = async () => {
       try {
-        const response = await logApi.incremental(currentAppCode.value, lastSeq, 500)
+        const response = await logApi.incremental(currentAppCode.value, lastSeq, 5000)
         const newLogs = response.logs || []
         if (newLogs.length > 0) {
           logs.value.push(...newLogs)
           lastSeq = newLogs[newLogs.length - 1].seq || lastSeq
-          // 限制日志条数，避免内存过大
-          if (logs.value.length > 2000) {
-            logs.value = logs.value.slice(-1500)
-          }
           await nextTick()
           scrollToBottom()
         }

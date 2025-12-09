@@ -1,8 +1,3 @@
-/**
- * 应用入口文件
- * 
- * 初始化Vue应用，配置Element Plus UI框架和路由
- */
 import { createApp } from 'vue'
 import ElementPlus from 'element-plus'
 import 'element-plus/dist/index.css'
