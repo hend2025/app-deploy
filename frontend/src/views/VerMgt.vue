@@ -45,6 +45,13 @@
             <strong>{{ row.appName }}</strong>
           </template>
         </el-table-column>
+        <el-table-column prop="appType" label="类型" width="80" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="row.appType === '1'" type="success" size="small">Java</el-tag>
+            <el-tag v-else-if="row.appType === '2'" type="warning" size="small">Vue</el-tag>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="version" label="版本号">
           <template #default="{ row }">
             <el-tag type="primary">{{ row.version }}</el-tag>
@@ -68,11 +75,11 @@
     <!-- 构建应用对话框 -->
     <el-dialog v-model="buildDialogVisible" :title="'应用构建 - ' + currentVersion.appName" width="450px">
       <el-form label-width="100px">
-        <el-form-item label="当前版本号">
+        <el-form-item label="当前版本">
           <el-input :model-value="currentVersion.version" readonly />
         </el-form-item>
-        <el-form-item label="目标版本号">
-          <el-input v-model="buildForm.targetVersion" placeholder="请输入目标版本号" />
+        <el-form-item label="分支/Tag" required>
+          <el-input v-model="buildForm.branchOrTag" placeholder="请输入分支名或Tag，如：master, v1.0.0" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -85,27 +92,51 @@
     <el-dialog v-model="editDialogVisible" :title="isEdit ? '编辑版本' : '新增版本'" width="1200px" align-center>
       <el-form :model="editForm" label-width="100px">
         <el-row :gutter="20">
-          <el-col :span="8">
+          <el-col :span="11">
             <el-form-item label="应用编码" required>
               <el-input v-model="editForm.appCode" :disabled="isEdit" placeholder="请输入应用编码" />
             </el-form-item>
           </el-col>
-          <el-col :span="8">
+          <el-col :span="7">
             <el-form-item label="应用名称">
               <el-input v-model="editForm.appName" placeholder="请输入应用名称" />
             </el-form-item>
           </el-col>
-          <el-col :span="8">
-            <el-form-item label="版本号">
-              <el-input v-model="editForm.version" placeholder="请输入版本号" />
+          <el-col :span="6">
+            <el-form-item label="应用类型">
+              <el-select v-model="editForm.appType" placeholder="请选择应用类型" style="width: 100%;">
+                <el-option label="Java" value="1" />
+                <el-option label="Vue" value="2" />
+              </el-select>
             </el-form-item>
           </el-col>
         </el-row>
-        <el-form-item label="Windows脚本">
-          <el-input v-model="editForm.scriptCmd" type="textarea" :rows="12" placeholder="Windows构建脚本内容（.bat/.cmd）" style="font-family: monospace;" />
-        </el-form-item>
-        <el-form-item label="Linux脚本">
-          <el-input v-model="editForm.scriptSh" type="textarea" :rows="12" placeholder="Linux构建脚本内容（.sh）" style="font-family: monospace;" />
+        <el-row :gutter="20">
+          <el-col :span="11">
+            <el-form-item label="Git地址">
+              <el-input v-model="editForm.gitUrl" placeholder="请输入Git仓库地址" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="7">
+            <el-form-item label="Git账号">
+              <el-input v-model="editForm.gitAcct" placeholder="请输入Git账号" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="6">
+            <el-form-item label="Git密码">
+              <el-input v-model="editForm.gitPwd" type="password" show-password placeholder="请输入Git密码" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
+          <el-col :span="24">
+            <el-form-item label="归档文件">
+              <el-input v-model="editForm.archiveFiles" placeholder="如：target/*.jar,dist/" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="构建脚本">
+          <el-input v-model="editForm.buildScript" type="textarea" :rows="15" placeholder="构建脚本内容，支持变量：$BRANCH_OR_TAG, $APP_CODE, $WORKSPACE_DIR" style="font-family: monospace;" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -134,10 +165,14 @@ export default {
     const loading = ref(false)
     const currentVersion = ref({})
     const buildDialogVisible = ref(false)
-    const buildForm = ref({ targetVersion: '' })
+    const buildForm = ref({ branchOrTag: '' })
     const editDialogVisible = ref(false)
     const isEdit = ref(false)
-    const editForm = ref({ appCode: '', appName: '', version: '', scriptCmd: '', scriptSh: '' })
+    const editForm = ref({ 
+      appCode: '', appName: '', appType: '', 
+      gitUrl: '', gitAcct: '', gitPwd: '', 
+      buildScript: '', archiveFiles: ''
+    })
     const logModal = ref(null)
     const selectedRow = ref(null)
 
@@ -170,13 +205,13 @@ export default {
 
     const buildApp = (version) => {
       currentVersion.value = version
-      buildForm.value.targetVersion = version.version
+      buildForm.value.branchOrTag = version.version || 'master'
       buildDialogVisible.value = true
     }
 
     const confirmBuild = async () => {
-      if (!buildForm.value.targetVersion.trim()) {
-        ElMessage.warning('请输入目标版本号')
+      if (!buildForm.value.branchOrTag.trim()) {
+        ElMessage.warning('请输入分支名或Tag')
         return
       }
       try {
@@ -186,7 +221,7 @@ export default {
         const response = await verBuildApi.build({
           appCode: currentVersion.value.appCode,
           appName: currentVersion.value.appName,
-          targetVersion: buildForm.value.targetVersion
+          branchOrTag: buildForm.value.branchOrTag
         })
         ElMessage.success('构建任务已启动')
         buildDialogVisible.value = false
@@ -234,7 +269,11 @@ export default {
 
     const addVersion = () => {
       isEdit.value = false
-      editForm.value = { appCode: '', appName: '', version: '', scriptCmd: '', scriptSh: '' }
+      editForm.value = { 
+        appCode: '', appName: '', appType: '', 
+        gitUrl: '', gitAcct: '', gitPwd: '', 
+        buildScript: '', archiveFiles: ''
+      }
       editDialogVisible.value = true
     }
 
@@ -246,10 +285,13 @@ export default {
       isEdit.value = true
       editForm.value = { 
         appCode: row.appCode, 
-        appName: row.appName, 
-        version: row.version, 
-        scriptCmd: row.scriptCmd || '', 
-        scriptSh: row.scriptSh || '' 
+        appName: row.appName,
+        appType: row.appType || '',
+        gitUrl: row.gitUrl || '',
+        gitAcct: row.gitAcct || '',
+        gitPwd: row.gitPwd || '',
+        buildScript: row.buildScript || '',
+        archiveFiles: row.archiveFiles || ''
       }
       editDialogVisible.value = true
     }

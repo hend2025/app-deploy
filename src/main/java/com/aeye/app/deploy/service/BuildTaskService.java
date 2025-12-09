@@ -4,6 +4,7 @@ import com.aeye.app.deploy.model.VerInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PreDestroy;
@@ -14,6 +15,8 @@ import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
@@ -31,6 +34,15 @@ public class BuildTaskService {
     @Autowired
     private LogBufferService logBufferService;
 
+    @Autowired
+    private GitService gitService;
+
+    @Value("${app.directory.workspace}")
+    private String workspaceDir;
+
+    @Value("${app.directory.archive}")
+    private String archiveDir;
+
     private final Map<String, Process> cmdMap = new ConcurrentHashMap<>();
     
     private static final int MAX_CONCURRENT_BUILDS = 5;
@@ -47,24 +59,13 @@ public class BuildTaskService {
         return System.getProperty("os.name").toLowerCase().contains("win");
     }
 
-    /**
-     * 获取脚本内容（根据操作系统选择）
-     */
-    private String getScriptContent(VerInfo appVersion) {
-        if (isWindows()) {
-            return appVersion.getScriptCmd();
-        } else {
-            return appVersion.getScriptSh();
-        }
-    }
+
 
     /**
      * 创建临时脚本文件
      */
     private File createTempScript(String appCode, String scriptContent, String targetVersion) throws IOException {
-        // 替换脚本中的版本号占位符
-        String processedContent = scriptContent.replace("${VERSION}", targetVersion)
-                                               .replace("$VERSION", targetVersion);
+        String processedContent = scriptContent;
 
         String extension = isWindows() ? ".cmd" : ".sh";
         File scriptFile = File.createTempFile("build_" + appCode + "_", extension);
@@ -78,8 +79,7 @@ public class BuildTaskService {
             processedContent = "@echo off\r\nchcp 65001 >nul\r\n" + processedContent;
             
             // 使用UTF-8编码写入
-            try (java.io.OutputStreamWriter writer = new java.io.OutputStreamWriter(
-                    new java.io.FileOutputStream(scriptFile), StandardCharsets.UTF_8)) {
+            try (java.io.OutputStreamWriter writer = new java.io.OutputStreamWriter(new java.io.FileOutputStream(scriptFile), StandardCharsets.UTF_8)) {
                 writer.write(processedContent);
             }
         } else {
@@ -94,9 +94,9 @@ public class BuildTaskService {
     }
 
     /**
-     * 启动构建任务
+     * 启动构建任务（新版：支持Git拉取和归档）
      */
-    public void startBuild(VerInfo appVersion, String targetVersion) {
+    public void startBuild(VerInfo appVersion, String branchOrTag) {
         String appCode = appVersion.getAppCode();
         
         // 检查是否已有构建任务在运行
@@ -119,53 +119,74 @@ public class BuildTaskService {
             throw new IllegalStateException("当前并发构建任务数已达到上限(" + MAX_CONCURRENT_BUILDS + ")，请等待其他构建任务完成");
         }
 
-        // 获取脚本内容
-        String scriptContent = getScriptContent(appVersion);
+        // 获取构建脚本
+        String scriptContent = appVersion.getBuildScript();
         if (scriptContent == null || scriptContent.trim().isEmpty()) {
-            String osType = isWindows() ? "Windows(script_cmd)" : "Linux(script_sh)";
-            throw new IllegalStateException("未配置" + osType + "构建脚本");
+            throw new IllegalStateException("未配置构建脚本");
         }
+        
+        final String finalScriptContent = scriptContent;
         
         // 立即更新状态为构建中
         verMgtService.updateStatus(appCode, "1", null);
         
         // 记录构建开始日志
-        logBufferService.addLog(appCode, targetVersion, "INFO", 
-            String.format("开始构建任务: %s, 目标版本: %s", appCode, targetVersion), new Date());
+        logBufferService.addLog(appCode, branchOrTag, "INFO", 
+            String.format("开始构建任务: %s, 分支/Tag: %s", appCode, branchOrTag), new Date());
         
         executorService.submit(() -> {
             Process process = null;
             File tempScriptFile = null;
+            String workDir = null;
             try {
-                logger.info("开始构建任务: {}, 版本: {}", appCode, targetVersion);
+                logger.info("开始构建任务: {}, 分支/Tag: {}", appCode, branchOrTag);
 
+                // 步骤1：拉取代码（如果配置了Git信息）
+                if (appVersion.getGitUrl() != null && !appVersion.getGitUrl().trim().isEmpty()) {
+                    logBufferService.addLog(appCode, branchOrTag, "INFO", "===== 步骤1: 拉取代码 =====", new Date());
+                    workDir = gitService.cloneOrPull(
+                        appCode, 
+                        appVersion.getGitUrl(), 
+                        appVersion.getGitAcct(), 
+                        appVersion.getGitPwd(), 
+                        branchOrTag,
+                        (level, msg) -> logBufferService.addLog(appCode, branchOrTag, level, msg, new Date())
+                    );
+                } else {
+                    workDir = new File(workspaceDir, appCode).getAbsolutePath();
+                    logBufferService.addLog(appCode, branchOrTag, "WARN", "未配置Git信息，跳过代码拉取", new Date());
+                }
+
+                // 步骤2：执行构建脚本
+                logBufferService.addLog(appCode, branchOrTag, "INFO", "===== 步骤2: 执行构建脚本 =====", new Date());
+                
                 // 创建临时脚本文件
-                tempScriptFile = createTempScript(appCode, scriptContent, targetVersion);
+                tempScriptFile = createTempScript(appCode, finalScriptContent, branchOrTag);
                 logger.info("创建临时脚本: {}", tempScriptFile.getAbsolutePath());
 
                 // 执行脚本
                 ProcessBuilder processBuilder = new ProcessBuilder();
                 if (isWindows()) {
-                    processBuilder.command("cmd", "/c", tempScriptFile.getAbsolutePath(), targetVersion);
+                    processBuilder.command("cmd", "/c", tempScriptFile.getAbsolutePath(), branchOrTag);
                 } else {
-                    processBuilder.command("bash", tempScriptFile.getAbsolutePath(), targetVersion);
+                    processBuilder.command("bash", tempScriptFile.getAbsolutePath(), branchOrTag);
                 }
-
-                // 合并标准输出和错误输出
-                processBuilder.redirectErrorStream(true);
                 
+                // 设置工作目录
+                processBuilder.directory(new File(workDir));
+                processBuilder.redirectErrorStream(true);
+
                 process = processBuilder.start();
                 cmdMap.put(appCode, process);
                 
                 // 读取进程输出并写入内存缓冲
-                // Maven/Java输出通常是UTF-8编码
                 final Process finalProcess = process;
                 Thread outputReader = new Thread(() -> {
                     try (BufferedReader reader = new BufferedReader(
                             new InputStreamReader(finalProcess.getInputStream(), StandardCharsets.UTF_8))) {
                         String line;
                         while ((line = reader.readLine()) != null) {
-                            logBufferService.addLog(appCode, targetVersion, parseLogLevel(line), line, new Date());
+                            logBufferService.addLog(appCode, branchOrTag, parseLogLevel(line), line, new Date());
                         }
                     } catch (Exception e) {
                         logger.error("读取构建输出失败: {}", appCode, e);
@@ -178,20 +199,28 @@ public class BuildTaskService {
 
                 // 更新任务状态
                 if (exitCode == 0) {
-                    logger.info("构建成功: {}, 版本: {}", appCode, targetVersion);
-                    logBufferService.addLog(appCode, targetVersion, "INFO", 
+                    logger.info("构建成功: {}, 分支/Tag: {}", appCode, branchOrTag);
+                    logBufferService.addLog(appCode, branchOrTag, "INFO", 
                         String.format("构建成功，退出码: %d", exitCode), new Date());
-                    verMgtService.updateStatus(appCode, "0", targetVersion);
+                    
+                    // 步骤3：归档文件
+                    if (appVersion.getArchiveFiles() != null && !appVersion.getArchiveFiles().trim().isEmpty()) {
+                        logBufferService.addLog(appCode, branchOrTag, "INFO", "===== 步骤3: 归档文件 =====", new Date());
+                        archiveFiles(appCode, branchOrTag, workDir, appVersion.getArchiveFiles(),
+                            (level, msg) -> logBufferService.addLog(appCode, branchOrTag, level, msg, new Date()));
+                    }
+                    
+                    verMgtService.updateStatus(appCode, "0", branchOrTag);
                 } else {
-                    logger.warn("构建失败: {}, 版本: {}, 退出码: {}", appCode, targetVersion, exitCode);
-                    logBufferService.addLog(appCode, targetVersion, "ERROR", 
+                    logger.warn("构建失败: {}, 分支/Tag: {}, 退出码: {}", appCode, branchOrTag, exitCode);
+                    logBufferService.addLog(appCode, branchOrTag, "ERROR", 
                         String.format("构建失败，退出码: %d", exitCode), new Date());
                     verMgtService.updateStatus(appCode, "0", null);
                 }
 
             } catch (Exception e) {
-                logger.error("构建任务异常: {}, 版本: {}", appCode, targetVersion, e);
-                logBufferService.addLog(appCode, targetVersion, "ERROR", 
+                logger.error("构建任务异常: {}, 分支/Tag: {}", appCode, branchOrTag, e);
+                logBufferService.addLog(appCode, branchOrTag, "ERROR", 
                     "构建任务异常: " + e.getMessage(), new Date());
                 try {
                     verMgtService.updateStatus(appCode, "0", null);
@@ -218,6 +247,57 @@ public class BuildTaskService {
                 }
             }
         });
+    }
+
+    /**
+     * 归档构建产物
+     * @param appCode 应用编码
+     * @param branchOrTag 分支或tag
+     * @param workDir 工作目录
+     * @param archiveFiles 归档文件配置（相对路径，多个用逗号分隔）
+     * @param logConsumer 日志回调
+     */
+    private void archiveFiles(String appCode, String branchOrTag, String workDir, String archiveFiles,
+                              java.util.function.BiConsumer<String, String> logConsumer) {
+        // 创建归档目录
+        File archivePath = new File(archiveDir);
+        if (!archivePath.exists()) {
+            archivePath.mkdirs();
+        }
+        
+        // 清理分支/tag名称中的特殊字符
+        String safeBranchName = branchOrTag.replaceAll("[/\\\\:*?\"<>|]", "_");
+        
+        String[] files = archiveFiles.split(",");
+        for (String file : files) {
+            file = file.trim();
+            if (file.isEmpty()) continue;
+            
+            File sourceFile = new File(workDir, file);
+            if (!sourceFile.exists()) {
+                logConsumer.accept("WARN", "归档文件不存在: " + file);
+                continue;
+            }
+            
+            // 目标文件名：应用名_分支或tag_原文件名
+            String originalName = sourceFile.getName();
+            String extension = "";
+            int dotIndex = originalName.lastIndexOf('.');
+            if (dotIndex > 0) {
+                extension = originalName.substring(dotIndex);
+                originalName = originalName.substring(0, dotIndex);
+            }
+            String targetName = appCode + "_" + safeBranchName + extension;
+            
+            File targetFile = new File(archivePath, targetName);
+            
+            try {
+                Files.copy(sourceFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                logConsumer.accept("INFO", "归档成功: " + file + " -> " + targetFile.getAbsolutePath());
+            } catch (IOException e) {
+                logConsumer.accept("ERROR", "归档失败: " + file + ", 原因: " + e.getMessage());
+            }
+        }
     }
     
     /**

@@ -17,9 +17,9 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * 日志内存缓冲服务
- * - max-size: 缓存最大条数（滚动存储，超过后删除旧的）
- * - flush-size: 每达到多少条就提交到数据库
+ * 日志内存缓冲服务（按应用隔离）
+ * - cache-size: 每个应用的缓存最大条数（滚动存储，超过后删除旧的）
+ * - flush-size: 每个应用达到多少条就提交到数据库
  * - flush-interval-minutes: 定时提交间隔
  */
 @Service
@@ -31,7 +31,7 @@ public class LogBufferService implements CommandLineRunner {
     private AppLogMapper appLogMapper;
 
     @Value("${app.log.cache-size:5000}")
-    private int maxBufferSize;
+    private int maxBufferSizePerApp;
 
     @Value("${app.log.flush-size:500}")
     private int flushSize;
@@ -39,28 +39,36 @@ public class LogBufferService implements CommandLineRunner {
     @Value("${app.log.flush-interval-minutes:5}")
     private int flushIntervalMinutes;
 
-    // 内存缓冲区（滚动存储）
-    private final ConcurrentLinkedDeque<AppLog> logBuffer = new ConcurrentLinkedDeque<>();
-    
-    // 缓冲区大小计数器
-    private final AtomicInteger bufferSize = new AtomicInteger(0);
-    
-    // 待提交计数器（用于判断是否达到flush-size）
-    private final AtomicInteger pendingCount = new AtomicInteger(0);
+    /**
+     * 每个应用独立的日志缓冲区
+     */
+    private static class AppLogBuffer {
+        final ConcurrentLinkedDeque<AppLog> logs = new ConcurrentLinkedDeque<>();
+        final AtomicInteger size = new AtomicInteger(0);
+        final AtomicInteger pendingCount = new AtomicInteger(0);
+        final ReentrantLock flushLock = new ReentrantLock();
+    }
+
+    // 按应用隔离的缓冲区 Map<appCode, AppLogBuffer>
+    private final ConcurrentHashMap<String, AppLogBuffer> appBuffers = new ConcurrentHashMap<>();
     
     // 全局日志序号（用于增量读取）
     private final AtomicLong logSequence = new AtomicLong(0);
     
-    // 刷新锁，防止并发刷新
-    private final ReentrantLock flushLock = new ReentrantLock();
-    
     // 定时刷新调度器
     private ScheduledExecutorService scheduler;
 
+    /**
+     * 获取或创建应用的日志缓冲区
+     */
+    private AppLogBuffer getOrCreateBuffer(String appCode) {
+        return appBuffers.computeIfAbsent(appCode, k -> new AppLogBuffer());
+    }
+
     @Override
     public void run(String... args) throws Exception {
-        logger.info("日志缓冲服务启动，缓存大小: {}，提交阈值: {}，刷新间隔: {} 分钟",
-                maxBufferSize, flushSize, flushIntervalMinutes);
+        logger.info("日志缓冲服务启动，每应用缓存大小: {}，提交阈值: {}，刷新间隔: {} 分钟",
+                maxBufferSizePerApp, flushSize, flushIntervalMinutes);
         startFlushScheduler();
     }
 
@@ -76,7 +84,7 @@ public class LogBufferService implements CommandLineRunner {
 
         scheduler.scheduleAtFixedRate(() -> {
             try {
-                flushToDatabase();
+                flushAllToDatabase();
             } catch (Exception e) {
                 logger.error("定时刷新日志到数据库时发生异常", e);
             }
@@ -84,19 +92,21 @@ public class LogBufferService implements CommandLineRunner {
     }
 
     /**
-     * 添加日志到缓冲区
+     * 添加日志到缓冲区（按应用隔离）
      */
     public void addLog(String appCode, String version, String logLevel, String logContent, Date logTime) {
+        AppLogBuffer buffer = getOrCreateBuffer(appCode);
         AppLog log = createAppLog(appCode, version, logLevel, logContent, logTime);
-        logBuffer.offerLast(log);
-        int currentSize = bufferSize.incrementAndGet();
-        int pending = pendingCount.incrementAndGet();
+        
+        buffer.logs.offerLast(log);
+        int currentSize = buffer.size.incrementAndGet();
+        int pending = buffer.pendingCount.incrementAndGet();
 
-        // 滚动存储：超过最大缓存大小时，删除最旧的日志
-        while (currentSize > maxBufferSize) {
-            AppLog removed = logBuffer.pollFirst();
+        // 滚动存储：超过该应用的最大缓存大小时，删除最旧的日志
+        while (currentSize > maxBufferSizePerApp) {
+            AppLog removed = buffer.logs.pollFirst();
             if (removed != null) {
-                currentSize = bufferSize.decrementAndGet();
+                currentSize = buffer.size.decrementAndGet();
             } else {
                 break;
             }
@@ -104,12 +114,12 @@ public class LogBufferService implements CommandLineRunner {
 
         // 检查是否达到提交阈值
         if (pending >= flushSize) {
-            flushToDatabase();
+            flushToDatabase(appCode);
         }
     }
 
     /**
-     * 批量添加日志到缓冲区
+     * 批量添加日志到缓冲区（按应用隔离）
      */
     public void addLogs(String appCode, String version, List<String> logLines) {
         if (logLines == null || logLines.isEmpty()) {
@@ -137,7 +147,7 @@ public class LogBufferService implements CommandLineRunner {
         log.setLogContent(logContent);
         log.setLogTime(logTime != null ? logTime : new Date());
         log.setCreateTime(new Date());
-        log.setSeq(logSequence.incrementAndGet()); // 设置序号
+        log.setSeq(logSequence.incrementAndGet());
         return log;
     }
 
@@ -162,33 +172,36 @@ public class LogBufferService implements CommandLineRunner {
     }
 
     /**
-     * 刷新缓冲区到数据库（只提交待提交的日志，不清空缓冲区）
+     * 刷新指定应用的缓冲区到数据库
      */
-    public void flushToDatabase() {
-        if (!flushLock.tryLock()) {
+    public void flushToDatabase(String appCode) {
+        AppLogBuffer buffer = appBuffers.get(appCode);
+        if (buffer == null) {
+            return;
+        }
+
+        if (!buffer.flushLock.tryLock()) {
             return;
         }
 
         try {
-            int pending = pendingCount.get();
+            int pending = buffer.pendingCount.get();
             if (pending == 0) {
                 return;
             }
 
-            logger.info("开始刷新日志到数据库，待提交条数: {}", pending);
+            logger.info("开始刷新应用[{}]日志到数据库，待提交条数: {}", appCode, pending);
 
-            // 从缓冲区复制待提交的日志（不删除，保留在缓冲区供查询）
+            // 从缓冲区复制待提交的日志
             List<AppLog> logsToFlush = new ArrayList<>();
             int count = 0;
             
-            // 从尾部向前取最新的pending条日志
-            Iterator<AppLog> it = logBuffer.descendingIterator();
+            Iterator<AppLog> it = buffer.logs.descendingIterator();
             while (it.hasNext() && count < pending) {
                 logsToFlush.add(it.next());
                 count++;
             }
             
-            // 反转顺序，保持时间顺序
             Collections.reverse(logsToFlush);
 
             // 批量插入
@@ -201,13 +214,28 @@ public class LogBufferService implements CommandLineRunner {
                 }
             }
 
-            // 重置待提交计数
-            pendingCount.set(0);
-            logger.info("日志刷新完成，已提交 {} 条", logsToFlush.size());
+            buffer.pendingCount.set(0);
+            logger.info("应用[{}]日志刷新完成，已提交 {} 条", appCode, logsToFlush.size());
 
         } finally {
-            flushLock.unlock();
+            buffer.flushLock.unlock();
         }
+    }
+
+    /**
+     * 刷新所有应用的缓冲区到数据库
+     */
+    public void flushAllToDatabase() {
+        for (String appCode : appBuffers.keySet()) {
+            flushToDatabase(appCode);
+        }
+    }
+
+    /**
+     * 兼容旧接口：刷新所有
+     */
+    public void flushToDatabase() {
+        flushAllToDatabase();
     }
 
     /**
@@ -233,29 +261,61 @@ public class LogBufferService implements CommandLineRunner {
     }
 
     /**
-     * 获取当前缓冲区大小
+     * 获取指定应用的缓冲区大小
+     */
+    public int getBufferSize(String appCode) {
+        AppLogBuffer buffer = appBuffers.get(appCode);
+        return buffer != null ? buffer.size.get() : 0;
+    }
+
+    /**
+     * 获取所有应用的缓冲区总大小
+     */
+    public int getTotalBufferSize() {
+        return appBuffers.values().stream().mapToInt(b -> b.size.get()).sum();
+    }
+
+    /**
+     * 兼容旧接口
      */
     public int getBufferSize() {
-        return bufferSize.get();
+        return getTotalBufferSize();
     }
 
     /**
      * 从缓冲区读取指定应用的日志（不会清除缓冲区）
      */
     public List<AppLog> getLogsFromBuffer(String appCode, int limit) {
-        List<AppLog> result = new ArrayList<>();
-        int count = 0;
-        
-        for (AppLog log : logBuffer) {
-            if (appCode == null || appCode.equals(log.getAppCode())) {
-                result.add(log);
-                count++;
-                if (limit > 0 && count >= limit) {
-                    break;
+        if (appCode == null || appCode.isEmpty()) {
+            // 读取所有应用的日志
+            List<AppLog> result = new ArrayList<>();
+            for (AppLogBuffer buffer : appBuffers.values()) {
+                int count = 0;
+                for (AppLog log : buffer.logs) {
+                    result.add(log);
+                    count++;
+                    if (limit > 0 && count >= limit) {
+                        break;
+                    }
                 }
             }
+            return result;
         }
         
+        AppLogBuffer buffer = appBuffers.get(appCode);
+        if (buffer == null) {
+            return new ArrayList<>();
+        }
+        
+        List<AppLog> result = new ArrayList<>();
+        int count = 0;
+        for (AppLog log : buffer.logs) {
+            result.add(log);
+            count++;
+            if (limit > 0 && count >= limit) {
+                break;
+            }
+        }
         return result;
     }
 
@@ -268,20 +328,35 @@ public class LogBufferService implements CommandLineRunner {
      */
     public List<AppLog> getLogsIncremental(String appCode, long afterSeq, int limit) {
         List<AppLog> result = new ArrayList<>();
-        int count = 0;
         
-        for (AppLog log : logBuffer) {
-            if (log.getSeq() != null && log.getSeq() > afterSeq) {
-                if (appCode == null || appCode.isEmpty() || appCode.equals(log.getAppCode())) {
-                    result.add(log);
-                    count++;
-                    if (limit > 0 && count >= limit) {
-                        break;
+        if (appCode == null || appCode.isEmpty()) {
+            // 读取所有应用的增量日志
+            for (AppLogBuffer buffer : appBuffers.values()) {
+                for (AppLog log : buffer.logs) {
+                    if (log.getSeq() != null && log.getSeq() > afterSeq) {
+                        result.add(log);
+                        if (limit > 0 && result.size() >= limit) {
+                            return result;
+                        }
                     }
                 }
             }
+            return result;
         }
         
+        AppLogBuffer buffer = appBuffers.get(appCode);
+        if (buffer == null) {
+            return result;
+        }
+        
+        for (AppLog log : buffer.logs) {
+            if (log.getSeq() != null && log.getSeq() > afterSeq) {
+                result.add(log);
+                if (limit > 0 && result.size() >= limit) {
+                    break;
+                }
+            }
+        }
         return result;
     }
 
@@ -297,19 +372,40 @@ public class LogBufferService implements CommandLineRunner {
      */
     public Map<String, Object> getBufferStatus() {
         Map<String, Object> status = new HashMap<>();
-        status.put("currentSize", bufferSize.get());
-        status.put("maxSize", maxBufferSize);
+        status.put("totalSize", getTotalBufferSize());
+        status.put("maxSizePerApp", maxBufferSizePerApp);
         status.put("flushSize", flushSize);
-        status.put("pendingCount", pendingCount.get());
         status.put("flushIntervalMinutes", flushIntervalMinutes);
+        status.put("appCount", appBuffers.size());
+        
+        // 每个应用的状态
+        Map<String, Map<String, Integer>> appStatus = new HashMap<>();
+        for (Map.Entry<String, AppLogBuffer> entry : appBuffers.entrySet()) {
+            Map<String, Integer> appInfo = new HashMap<>();
+            appInfo.put("size", entry.getValue().size.get());
+            appInfo.put("pending", entry.getValue().pendingCount.get());
+            appStatus.put(entry.getKey(), appInfo);
+        }
+        status.put("apps", appStatus);
+        
         return status;
+    }
+
+    /**
+     * 清除指定应用的缓冲区
+     */
+    public void clearBuffer(String appCode) {
+        AppLogBuffer buffer = appBuffers.remove(appCode);
+        if (buffer != null) {
+            logger.info("已清除应用[{}]的日志缓冲区", appCode);
+        }
     }
 
     @PreDestroy
     public void shutdown() {
         logger.info("正在关闭日志缓冲服务...");
         
-        flushToDatabase();
+        flushAllToDatabase();
         
         if (scheduler != null && !scheduler.isShutdown()) {
             scheduler.shutdown();

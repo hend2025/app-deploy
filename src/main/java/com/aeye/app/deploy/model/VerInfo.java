@@ -22,14 +22,39 @@ public class VerInfo {
     private String status;
 
     /**
-     * Windows 构建脚本内容
+     * 应用类型：1-java, 2-vue
      */
-    private String scriptCmd;
+    private String appType;
 
     /**
-     * Linux 构建脚本内容
+     * Git仓库地址
      */
-    private String scriptSh;
+    private String gitUrl;
+
+    /**
+     * Git账号
+     */
+    private String gitAcct;
+
+    /**
+     * Git密码
+     */
+    private String gitPwd;
+
+    /**
+     * 构建参数
+     */
+    private String params;
+
+    /**
+     * 构建脚本
+     */
+    private String buildScript;
+
+    /**
+     * 归档文件（相对路径，多个用逗号分隔）
+     */
+    private String archiveFiles;
 
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date updateTime;

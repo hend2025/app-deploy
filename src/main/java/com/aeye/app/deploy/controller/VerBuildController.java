@@ -48,7 +48,7 @@ public class VerBuildController {
     public ResponseEntity<Map<String, Object>> startBuild(@RequestBody Map<String, String> request) {
         try {
             String appCode = request.get("appCode");
-            String targetVersion = request.get("targetVersion");
+            String branchOrTag = request.get("branchOrTag");
 
             if (appCode == null || appCode.trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
@@ -57,10 +57,10 @@ public class VerBuildController {
                 return ResponseEntity.ok(response);
             }
 
-            if (targetVersion == null || targetVersion.trim().isEmpty()) {
+            if (branchOrTag == null || branchOrTag.trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "目标版本号不能为空");
+                response.put("message", "分支/Tag不能为空");
                 return ResponseEntity.ok(response);
             }
 
@@ -73,19 +73,17 @@ public class VerBuildController {
                 return ResponseEntity.ok(response);
             }
 
-            // 检查是否配置了构建脚本（根据操作系统检查对应字段）
-            boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
-            String scriptContent = isWindows ? appVersion.getScriptCmd() : appVersion.getScriptSh();
+            // 检查是否配置了构建脚本
+            String scriptContent = appVersion.getBuildScript();
             if (scriptContent == null || scriptContent.trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                String osType = isWindows ? "Windows(script_cmd)" : "Linux(script_sh)";
-                response.put("message", "应用未配置" + osType + "构建脚本");
+                response.put("message", "应用未配置构建脚本");
                 return ResponseEntity.ok(response);
             }
 
             // 启动构建任务
-            buildTaskService.startBuild(appVersion, targetVersion);
+            buildTaskService.startBuild(appVersion, branchOrTag);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
