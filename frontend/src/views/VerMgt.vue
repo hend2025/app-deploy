@@ -379,6 +379,7 @@ export default {
 }
 .action-buttons .el-button {
   margin: 0;
+  height: 28px;
   min-width: 60px;
 }
 :deep(.el-table__body tr.current-row > td.el-table__cell) {

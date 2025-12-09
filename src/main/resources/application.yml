@@ -25,7 +25,6 @@ app:
   directory:
     workspace: /home/workspace
     archive: /home/archive
-    release: /home/release
     logs: /home/logs
   log:
     cache-size: 5000

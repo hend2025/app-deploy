@@ -130,6 +130,9 @@ public class BuildTaskService {
         // 立即更新状态为构建中
         verMgtService.updateStatus(appCode, "1", null);
         
+        // 清除该应用的日志缓存，避免显示上次构建的日志
+        logBufferService.clearBuffer(appCode);
+        
         // 记录构建开始日志
         logBufferService.addLog(appCode, branchOrTag, "INFO", 
             String.format("开始构建任务: %s, 分支/Tag: %s", appCode, branchOrTag), new Date());
@@ -254,7 +257,7 @@ public class BuildTaskService {
      * @param appCode 应用编码
      * @param branchOrTag 分支或tag
      * @param workDir 工作目录
-     * @param archiveFiles 归档文件配置（相对路径，多个用逗号分隔）
+     * @param archiveFiles 归档文件配置（支持glob模式，多个用逗号分隔）
      * @param logConsumer 日志回调
      */
     private void archiveFiles(String appCode, String branchOrTag, String workDir, String archiveFiles,
@@ -268,36 +271,108 @@ public class BuildTaskService {
         // 清理分支/tag名称中的特殊字符
         String safeBranchName = branchOrTag.replaceAll("[/\\\\:*?\"<>|]", "_");
         
-        String[] files = archiveFiles.split(",");
-        for (String file : files) {
-            file = file.trim();
-            if (file.isEmpty()) continue;
+        String[] patterns = archiveFiles.split(",");
+        for (String pattern : patterns) {
+            pattern = pattern.trim();
+            if (pattern.isEmpty()) continue;
             
-            File sourceFile = new File(workDir, file);
-            if (!sourceFile.exists()) {
-                logConsumer.accept("WARN", "归档文件不存在: " + file);
-                continue;
-            }
-            
-            // 目标文件名：应用名_分支或tag_原文件名
-            String originalName = sourceFile.getName();
-            String extension = "";
-            int dotIndex = originalName.lastIndexOf('.');
-            if (dotIndex > 0) {
-                extension = originalName.substring(dotIndex);
-                originalName = originalName.substring(0, dotIndex);
-            }
-            String targetName = appCode + "_" + safeBranchName + extension;
-            
-            File targetFile = new File(archivePath, targetName);
-            
-            try {
-                Files.copy(sourceFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-                logConsumer.accept("INFO", "归档成功: " + file + " -> " + targetFile.getAbsolutePath());
-            } catch (IOException e) {
-                logConsumer.accept("ERROR", "归档失败: " + file + ", 原因: " + e.getMessage());
+            // 检查是否为glob模式
+            if (pattern.contains("*") || pattern.contains("?")) {
+                // 使用glob模式匹配文件
+                try {
+                    Path workPath = java.nio.file.Paths.get(workDir);
+                    String globPattern = "glob:" + pattern;
+                    java.nio.file.PathMatcher matcher = java.nio.file.FileSystems.getDefault().getPathMatcher(globPattern);
+                    
+                    List<Path> matchedFiles = new ArrayList<>();
+                    Files.walkFileTree(workPath, new java.nio.file.SimpleFileVisitor<Path>() {
+                        @Override
+                        public java.nio.file.FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) {
+                            Path relativePath = workPath.relativize(file);
+                            if (matcher.matches(relativePath)) {
+                                matchedFiles.add(file);
+                            }
+                            return java.nio.file.FileVisitResult.CONTINUE;
+                        }
+                    });
+                    
+                    if (matchedFiles.isEmpty()) {
+                        logConsumer.accept("WARN", "未找到匹配的文件: " + pattern);
+                        continue;
+                    }
+                    
+                    for (Path matchedFile : matchedFiles) {
+                        archiveSingleFile(matchedFile.toFile(), archivePath, safeBranchName, logConsumer);
+                    }
+                } catch (IOException e) {
+                    logConsumer.accept("ERROR", "遍历目录失败: " + pattern + ", 原因: " + e.getMessage());
+                }
+            } else {
+                // 普通文件路径
+                File sourceFile = new File(workDir, pattern);
+                if (!sourceFile.exists()) {
+                    logConsumer.accept("WARN", "归档文件不存在: " + pattern);
+                    continue;
+                }
+                archiveSingleFile(sourceFile, archivePath, safeBranchName, logConsumer);
             }
         }
+    }
+    
+    /**
+     * 归档单个文件
+     * 将版本号替换为分支或tag名称
+     * 例如：hsa-ims-platform-local-bosg-generic-2.0.9-SNAPSHOT.jar -> hsa-ims-platform-local-bosg-generic-v2025.93.jar
+     */
+    private void archiveSingleFile(File sourceFile, File archivePath, String branchOrTag,
+                                   java.util.function.BiConsumer<String, String> logConsumer) {
+        String originalName = sourceFile.getName();
+        String targetName = replaceVersionWithBranch(originalName, branchOrTag);
+        
+        File targetFile = new File(archivePath, targetName);
+        
+        try {
+            Files.copy(sourceFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            logConsumer.accept("INFO", "归档成功: " + sourceFile.getName() + " -> " + targetFile.getAbsolutePath());
+        } catch (IOException e) {
+            logConsumer.accept("ERROR", "归档失败: " + sourceFile.getName() + ", 原因: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 将文件名中的版本号及之后的部分替换为分支或tag名称
+     * 保留版本号之前的名称部分
+     * 例如：hsa-ims-platform-local-bosg-generic-2.0.9-SNAPSHOT.jar -> hsa-ims-platform-local-bosg-generic-v2025.93.jar
+     */
+    private String replaceVersionWithBranch(String fileName, String branchOrTag) {
+        // 获取扩展名
+        String extension = "";
+        String baseName = fileName;
+        int lastDotIndex = fileName.lastIndexOf('.');
+        if (lastDotIndex > 0) {
+            extension = fileName.substring(lastDotIndex);
+            baseName = fileName.substring(0, lastDotIndex);
+        }
+        
+        // 匹配版本号模式：数字.数字.数字 开头，后面可能跟其他内容
+        // 例如：2.0.9-SNAPSHOT, 1.0.0, 1.0.0.1-SNAPSHOT
+        String versionPattern = "\\d+\\.\\d+\\.\\d+.*";
+        
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(versionPattern);
+        java.util.regex.Matcher matcher = pattern.matcher(baseName);
+        
+        if (matcher.find()) {
+            // 获取版本号之前的部分（保留前缀）
+            String prefix = baseName.substring(0, matcher.start());
+            // 移除末尾的连接符（如 - 或 _）
+            if (prefix.endsWith("-") || prefix.endsWith("_")) {
+                prefix = prefix.substring(0, prefix.length() - 1);
+            }
+            return prefix + "-" + branchOrTag + extension;
+        }
+        
+        // 如果没有匹配到版本号，在扩展名前添加分支名
+        return baseName + "-" + branchOrTag + extension;
     }
     
     /**

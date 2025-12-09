@@ -1,33 +1,35 @@
 <template>
   <el-dialog
     v-model="visible"
-    :title="'日志详情 - ' + currentAppCode"
     fullscreen
     :close-on-click-modal="false"
+    :show-close="false"
     @close="handleClose"
   >
+    <template #header>
+      <div class="dialog-header">
+        <span class="dialog-title">日志详情 - {{ currentAppCode }}</span>
+        <div class="dialog-actions">
+          <el-button 
+            :type="autoRefreshEnabled ? 'warning' : 'success'"
+            size="small"
+            @click="toggleAutoRefresh"
+          >
+            {{ autoRefreshEnabled ? '停止刷新' : '自动刷新' }}
+          </el-button>
+          <el-button type="info" size="small" @click="scrollToBottom">到底部</el-button>
+          <el-button type="warning" size="small" @click="clearLogContent">清空</el-button>
+          <el-button size="small" @click="visible = false">关闭</el-button>
+        </div>
+      </div>
+    </template>
     <div ref="logContent" class="log-content">
       <div v-for="(log, index) in logs" :key="index" class="log-line" :class="'log-' + (log.logLevel || 'info').toLowerCase()">
         <span class="log-time">{{ log.logTime }}</span>
-        <span class="log-level">{{ log.logLevel }}</span>
         <span class="log-text">{{ log.logContent }}</span>
       </div>
       <div v-if="logs.length === 0" class="empty-tip">暂无日志</div>
     </div>
-    <template #footer>
-      <div class="dialog-footer">
-        <el-button 
-          :type="autoRefreshEnabled ? 'warning' : 'success'"
-          size="small"
-          @click="toggleAutoRefresh"
-        >
-          {{ autoRefreshEnabled ? '停止刷新' : '自动刷新' }}
-        </el-button>
-        <el-button type="info" size="small" @click="scrollToBottom">到底部</el-button>
-        <el-button type="warning" size="small" @click="clearLogContent">清空</el-button>
-        <el-button size="small" @click="visible = false">关闭</el-button>
-      </div>
-    </template>
   </el-dialog>
 </template>
 
@@ -122,7 +124,7 @@ export default {
 
 <style scoped>
 .log-content {
-  height: calc(100vh - 180px);
+  height: calc(100vh - 120px);
   overflow-y: auto;
   background-color: #fff;
   padding: 10px;
@@ -150,5 +152,8 @@ export default {
 .log-error { background: #fef0f0; }
 .log-error .log-level { color: #f56c6c; }
 .empty-tip { text-align: center; color: #909399; padding: 50px; }
-.dialog-footer { display: flex; gap: 8px; justify-content: flex-end; }
+.dialog-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+.dialog-title { font-size: 18px; font-weight: 600; }
+.dialog-actions { display: flex; gap: 8px; }
+.dialog-actions .el-button { height: 32px; padding: 0 16px; }
 </style>

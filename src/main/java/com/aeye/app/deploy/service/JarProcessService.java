@@ -27,7 +27,7 @@ public class JarProcessService {
     
     private static final Logger logger = LoggerFactory.getLogger(JarProcessService.class);
     
-    @Value("${app.directory.release:/home/release}")
+    @Value("${app.directory.archive:/home/archive}")
     private String jarDir;
     
     @Autowired
