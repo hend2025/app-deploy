@@ -1,3 +1,11 @@
+<!--
+  顶部导航栏组件
+  
+  功能：
+  - 显示系统标题
+  - 提供页面导航（版本构建、应用启动）
+  - 自动高亮当前页面对应的菜单项
+-->
 <template>
   <el-menu
     mode="horizontal"
@@ -8,13 +16,15 @@
     router
     :ellipsis="false"
   >
+    <!-- 系统标题（不可点击） -->
     <el-menu-item index="/deploy/" disabled class="brand-title">
       Spring Boot 应用管理
     </el-menu-item>
+    <!-- 弹性占位，将导航项推到右侧 -->
     <div style="flex-grow: 1;"></div>
+    <!-- 导航菜单项 -->
     <el-menu-item index="/deploy/">版本构建</el-menu-item>
     <el-menu-item index="/deploy/appMgt">应用启动</el-menu-item>
-    <el-menu-item index="/deploy/logMgt">日志查看</el-menu-item>
   </el-menu>
 </template>
 
@@ -26,6 +36,7 @@ export default {
   name: 'Navbar',
   setup() {
     const route = useRoute()
+    // 根据当前路由路径计算激活的菜单项
     const activeIndex = computed(() => route.path)
     return { activeIndex }
   }

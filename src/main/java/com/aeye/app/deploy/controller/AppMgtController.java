@@ -12,6 +12,19 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 应用管理控制器
+ * <p>
+ * 提供JAR应用的生命周期管理接口，包括：
+ * <ul>
+ *   <li>应用列表查询（含进程状态检测）</li>
+ *   <li>应用启动/停止</li>
+ *   <li>应用配置的增删改</li>
+ * </ul>
+ *
+ * @author aeye
+ * @since 1.0.0
+ */
 @RestController
 @RequestMapping("/appMgt")
 public class AppMgtController {
@@ -22,11 +35,17 @@ public class AppMgtController {
     @Autowired
     private JarProcessService jarProcessService;
 
-    // 进程状态缓存，减少系统调用
+    /** 进程状态缓存，用于减少系统调用频率 */
     private final Map<String, CachedProcessInfo> processCache = new ConcurrentHashMap<>();
-    private static final long CACHE_EXPIRY_MS = 10000; // 10秒缓存
     
-    // 缓存进程信息的内部类
+    /** 缓存过期时间（毫秒） */
+    private static final long CACHE_EXPIRY_MS = 10000;
+    
+    /**
+     * 进程信息缓存内部类
+     * <p>
+     * 缓存进程ID和时间戳，支持过期检测
+     */
     private static class CachedProcessInfo {
         String pid;
         long timestamp;
@@ -36,16 +55,27 @@ public class AppMgtController {
             this.timestamp = timestamp;
         }
         
+        /**
+         * 检查缓存是否已过期
+         * @return true-已过期，false-未过期
+         */
         boolean isExpired() {
             return System.currentTimeMillis() - timestamp > CACHE_EXPIRY_MS;
         }
     }
 
+    /**
+     * 获取应用列表
+     * <p>
+     * 返回所有应用的配置信息和实时运行状态（通过检测系统进程获取）
+     *
+     * @param appName 应用名称过滤条件（可选，支持模糊匹配）
+     * @return 应用列表，包含状态：1-就绪，2-运行中
+     */
     @GetMapping("/list")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> getAppList(@RequestParam(required = false) String appName) {
         try {
-            // 直接从apps.json获取应用列表
             List<AppInfo> allApps = appMgtService.getAllApps();
             
             // 如果指定了应用名称，进行过滤
@@ -106,6 +136,14 @@ public class AppMgtController {
         }
     }
 
+    /**
+     * 启动应用
+     * <p>
+     * 异步启动指定版本的JAR应用，支持自定义JVM参数
+     *
+     * @param request 请求参数：appCode-应用编码，version-版本号，params-JVM参数
+     * @return 启动结果
+     */
     @PostMapping("/start")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> startApp(@RequestBody Map<String, String> request) {
@@ -144,6 +182,14 @@ public class AppMgtController {
         }
     }
 
+    /**
+     * 保存应用配置
+     * <p>
+     * 新增或更新应用配置信息
+     *
+     * @param appInfo 应用信息
+     * @return 保存结果
+     */
     @PostMapping("/save")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> saveApp(@RequestBody AppInfo appInfo) {
@@ -169,6 +215,12 @@ public class AppMgtController {
         }
     }
 
+    /**
+     * 删除应用配置
+     *
+     * @param request 请求参数：appCode-应用编码
+     * @return 删除结果
+     */
     @PostMapping("/delete")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> deleteApp(@RequestBody Map<String, String> request) {
@@ -195,6 +247,14 @@ public class AppMgtController {
         }
     }
 
+    /**
+     * 停止应用
+     * <p>
+     * 通过进程ID强制终止应用进程
+     *
+     * @param request 请求参数：appCode-应用编码，pid-进程ID
+     * @return 停止结果
+     */
     @PostMapping("/stop")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> stopApp(@RequestBody Map<String, String> request) {

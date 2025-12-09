@@ -22,11 +22,26 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * JAR应用进程服务
+ * <p>
+ * 负责JAR应用的启动管理，包括：
+ * <ul>
+ *   <li>版本切换（复制指定版本JAR到运行位置）</li>
+ *   <li>进程启动（支持自定义JVM参数）</li>
+ *   <li>日志采集（实时读取进程输出到日志缓冲区）</li>
+ * </ul>
+ * 支持跨平台（Windows/Linux）运行。
+ *
+ * @author aeye
+ * @since 1.0.0
+ */
 @Service
 public class JarProcessService {
     
     private static final Logger logger = LoggerFactory.getLogger(JarProcessService.class);
     
+    /** JAR文件存放目录 */
     @Value("${app.directory.archive:/home/archive}")
     private String jarDir;
     
@@ -36,12 +51,16 @@ public class JarProcessService {
     @Autowired
     private LogBufferService logBufferService;
 
-    // 检测操作系统类型
+    /** 操作系统名称 */
     private static final String OS = System.getProperty("os.name").toLowerCase();
+    
+    /** 是否为Windows系统 */
     private static final boolean IS_WINDOWS = OS.contains("win");
     
-    // 使用固定大小线程池管理启动任务，限制并发数，避免资源耗尽
+    /** 最大并发启动任务数 */
     private static final int MAX_CONCURRENT_STARTUPS = 10;
+    
+    /** 启动任务线程池 */
     private final ExecutorService executorService = Executors.newFixedThreadPool(MAX_CONCURRENT_STARTUPS, r -> {
         Thread thread = new Thread(r, "jar-startup-thread");
         thread.setDaemon(true);
@@ -49,13 +68,24 @@ public class JarProcessService {
     });
 
     /**
-     * 启动jar应用
+     * 启动JAR应用
+     * <p>
+     * 执行流程：
+     * <ol>
+     *   <li>复制指定版本JAR到运行位置（appCode.jar）</li>
+     *   <li>构建启动命令（Java + JVM参数 + JAR）</li>
+     *   <li>异步启动进程并采集日志</li>
+     * </ol>
+     *
+     * @param appCode 应用编码
+     * @param version 版本号
+     * @param params  JVM启动参数（多行，每行一个参数）
+     * @throws Exception 如果JAR文件不存在或启动失败
      */
-    public void startJarApp(String appCode,String version,String params) throws Exception{
-
-        // 构建jar文件完整路径 - 使用跨平台路径分隔符
-        String jarFilePath = jarDir + File.separator + appCode+".jar";
-        String jarFilePath2 = jarDir + File.separator + appCode+"-"+version+".jar";
+    public void startJarApp(String appCode, String version, String params) throws Exception {
+        // 构建JAR文件路径
+        String jarFilePath = jarDir + File.separator + appCode + ".jar";
+        String jarFilePath2 = jarDir + File.separator + appCode + "-" + version + ".jar";
         File file = new File(jarFilePath2);
 
         if (!file.exists()) {
@@ -192,7 +222,9 @@ public class JarProcessService {
     }
     
     /**
-     * 应用关闭时优雅关闭线程池
+     * 服务销毁时的清理操作
+     * <p>
+     * 优雅关闭线程池，等待正在执行的启动任务完成
      */
     @PreDestroy
     public void shutdown() {

@@ -12,11 +12,23 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.function.BiConsumer;
 
+/**
+ * Git操作服务
+ * <p>
+ * 提供Git仓库的克隆和更新功能，支持：
+ * <ul>
+ *   <li>HTTP/HTTPS协议的仓库认证</li>
+ *   <li>分支/Tag切换</li>
+ *   <li>增量更新（已存在仓库时执行fetch+checkout）</li>
+ * </ul>
+ *
+ * @author aeye
+ * @since 1.0.0
+ */
 @Service
 public class GitService {
 
-    private static final Logger logger = LoggerFactory.getLogger(GitService.class);
-
+    /** 工作空间目录 */
     @Value("${app.directory.workspace}")
     private String workspaceDir;
 

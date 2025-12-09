@@ -17,10 +17,25 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * 日志内存缓冲服务（按应用隔离）
- * - cache-size: 每个应用的缓存最大条数（滚动存储，超过后删除旧的）
- * - flush-size: 每个应用达到多少条就提交到数据库
- * - flush-interval-minutes: 定时提交间隔
+ * 日志内存缓冲服务
+ * <p>
+ * 提供高性能的日志缓冲机制，支持：
+ * <ul>
+ *   <li>按应用隔离的独立缓冲区</li>
+ *   <li>滚动存储（超过最大条数自动删除旧日志）</li>
+ *   <li>增量读取（通过序号实现客户端增量拉取）</li>
+ *   <li>定时/阈值触发的数据库持久化</li>
+ * </ul>
+ * 
+ * 配置参数：
+ * <ul>
+ *   <li>app.log.cache-size: 每个应用的缓存最大条数（默认5000）</li>
+ *   <li>app.log.flush-size: 触发持久化的阈值（默认500）</li>
+ *   <li>app.log.flush-interval-minutes: 定时持久化间隔（默认5分钟）</li>
+ * </ul>
+ *
+ * @author aeye
+ * @since 1.0.0
  */
 @Service
 public class LogBufferService implements CommandLineRunner {
@@ -40,22 +55,28 @@ public class LogBufferService implements CommandLineRunner {
     private int flushIntervalMinutes;
 
     /**
-     * 每个应用独立的日志缓冲区
+     * 应用日志缓冲区内部类
+     * <p>
+     * 每个应用独立的缓冲区，包含日志队列、计数器和刷新锁
      */
     private static class AppLogBuffer {
+        /** 日志双端队列（支持头尾操作） */
         final ConcurrentLinkedDeque<AppLog> logs = new ConcurrentLinkedDeque<>();
+        /** 当前缓冲区大小 */
         final AtomicInteger size = new AtomicInteger(0);
+        /** 待持久化的日志数量 */
         final AtomicInteger pendingCount = new AtomicInteger(0);
+        /** 刷新锁（防止并发刷新） */
         final ReentrantLock flushLock = new ReentrantLock();
     }
 
-    // 按应用隔离的缓冲区 Map<appCode, AppLogBuffer>
+    /** 按应用隔离的缓冲区映射 */
     private final ConcurrentHashMap<String, AppLogBuffer> appBuffers = new ConcurrentHashMap<>();
     
-    // 全局日志序号（用于增量读取）
+    /** 全局日志序号生成器（用于增量读取） */
     private final AtomicLong logSequence = new AtomicLong(0);
     
-    // 定时刷新调度器
+    /** 定时刷新调度器 */
     private ScheduledExecutorService scheduler;
 
     /**
@@ -92,7 +113,16 @@ public class LogBufferService implements CommandLineRunner {
     }
 
     /**
-     * 添加日志到缓冲区（按应用隔离）
+     * 添加日志到缓冲区
+     * <p>
+     * 日志会被添加到对应应用的独立缓冲区，超过最大容量时自动删除旧日志。
+     * 当待持久化日志数达到阈值时，自动触发数据库写入。
+     *
+     * @param appCode    应用编码
+     * @param version    版本号
+     * @param logLevel   日志级别
+     * @param logContent 日志内容
+     * @param logTime    日志时间
      */
     public void addLog(String appCode, String version, String logLevel, String logContent, Date logTime) {
         AppLogBuffer buffer = getOrCreateBuffer(appCode);
@@ -119,24 +149,6 @@ public class LogBufferService implements CommandLineRunner {
     }
 
     /**
-     * 批量添加日志到缓冲区（按应用隔离）
-     */
-    public void addLogs(String appCode, String version, List<String> logLines) {
-        if (logLines == null || logLines.isEmpty()) {
-            return;
-        }
-
-        Date now = new Date();
-        for (String line : logLines) {
-            if (line == null || line.trim().isEmpty()) {
-                continue;
-            }
-            String logLevel = parseLogLevel(line);
-            addLog(appCode, version, logLevel, line, now);
-        }
-    }
-
-    /**
      * 创建AppLog对象
      */
     private AppLog createAppLog(String appCode, String version, String logLevel, String logContent, Date logTime) {
@@ -146,33 +158,16 @@ public class LogBufferService implements CommandLineRunner {
         log.setLogLevel(logLevel);
         log.setLogContent(logContent);
         log.setLogTime(logTime != null ? logTime : new Date());
-        log.setCreateTime(new Date());
         log.setSeq(logSequence.incrementAndGet());
         return log;
     }
 
     /**
-     * 解析日志级别
-     */
-    private String parseLogLevel(String logContent) {
-        if (logContent == null) {
-            return "INFO";
-        }
-        String upper = logContent.toUpperCase();
-        if (upper.contains("ERROR")) {
-            return "ERROR";
-        } else if (upper.contains("WARN")) {
-            return "WARN";
-        } else if (upper.contains("DEBUG")) {
-            return "DEBUG";
-        } else if (upper.contains("TRACE")) {
-            return "TRACE";
-        }
-        return "INFO";
-    }
-
-    /**
      * 刷新指定应用的缓冲区到数据库
+     * <p>
+     * 将待持久化的日志批量写入数据库，使用锁防止并发刷新
+     *
+     * @param appCode 应用编码
      */
     public void flushToDatabase(String appCode) {
         AppLogBuffer buffer = appBuffers.get(appCode);
@@ -232,13 +227,6 @@ public class LogBufferService implements CommandLineRunner {
     }
 
     /**
-     * 兼容旧接口：刷新所有
-     */
-    public void flushToDatabase() {
-        flushAllToDatabase();
-    }
-
-    /**
      * 批量插入日志
      */
     private void batchInsertLogs(List<AppLog> logs) {
@@ -261,14 +249,6 @@ public class LogBufferService implements CommandLineRunner {
     }
 
     /**
-     * 获取指定应用的缓冲区大小
-     */
-    public int getBufferSize(String appCode) {
-        AppLogBuffer buffer = appBuffers.get(appCode);
-        return buffer != null ? buffer.size.get() : 0;
-    }
-
-    /**
      * 获取所有应用的缓冲区总大小
      */
     public int getTotalBufferSize() {
@@ -283,67 +263,18 @@ public class LogBufferService implements CommandLineRunner {
     }
 
     /**
-     * 从缓冲区读取指定应用的日志（不会清除缓冲区）
-     */
-    public List<AppLog> getLogsFromBuffer(String appCode, int limit) {
-        if (appCode == null || appCode.isEmpty()) {
-            // 读取所有应用的日志
-            List<AppLog> result = new ArrayList<>();
-            for (AppLogBuffer buffer : appBuffers.values()) {
-                int count = 0;
-                for (AppLog log : buffer.logs) {
-                    result.add(log);
-                    count++;
-                    if (limit > 0 && count >= limit) {
-                        break;
-                    }
-                }
-            }
-            return result;
-        }
-        
-        AppLogBuffer buffer = appBuffers.get(appCode);
-        if (buffer == null) {
-            return new ArrayList<>();
-        }
-        
-        List<AppLog> result = new ArrayList<>();
-        int count = 0;
-        for (AppLog log : buffer.logs) {
-            result.add(log);
-            count++;
-            if (limit > 0 && count >= limit) {
-                break;
-            }
-        }
-        return result;
-    }
-
-    /**
-     * 增量读取日志（从指定序号之后的日志）
-     * @param appCode 应用编码（可选，为空则读取所有应用）
+     * 增量读取日志
+     * <p>
+     * 返回指定序号之后的新日志，用于客户端轮询获取增量数据
+     *
+     * @param appCode  应用编码
      * @param afterSeq 上次读取的最后序号，返回大于此序号的日志
-     * @param limit 最大返回条数
-     * @return 增量日志列表
+     * @param limit    最大返回条数
+     * @return 增量日志列表（按序号升序）
      */
     public List<AppLog> getLogsIncremental(String appCode, long afterSeq, int limit) {
         List<AppLog> result = new ArrayList<>();
-        
-        if (appCode == null || appCode.isEmpty()) {
-            // 读取所有应用的增量日志
-            for (AppLogBuffer buffer : appBuffers.values()) {
-                for (AppLog log : buffer.logs) {
-                    if (log.getSeq() != null && log.getSeq() > afterSeq) {
-                        result.add(log);
-                        if (limit > 0 && result.size() >= limit) {
-                            return result;
-                        }
-                    }
-                }
-            }
-            return result;
-        }
-        
+
         AppLogBuffer buffer = appBuffers.get(appCode);
         if (buffer == null) {
             return result;
@@ -368,31 +299,11 @@ public class LogBufferService implements CommandLineRunner {
     }
 
     /**
-     * 获取缓冲区状态
-     */
-    public Map<String, Object> getBufferStatus() {
-        Map<String, Object> status = new HashMap<>();
-        status.put("totalSize", getTotalBufferSize());
-        status.put("maxSizePerApp", maxBufferSizePerApp);
-        status.put("flushSize", flushSize);
-        status.put("flushIntervalMinutes", flushIntervalMinutes);
-        status.put("appCount", appBuffers.size());
-        
-        // 每个应用的状态
-        Map<String, Map<String, Integer>> appStatus = new HashMap<>();
-        for (Map.Entry<String, AppLogBuffer> entry : appBuffers.entrySet()) {
-            Map<String, Integer> appInfo = new HashMap<>();
-            appInfo.put("size", entry.getValue().size.get());
-            appInfo.put("pending", entry.getValue().pendingCount.get());
-            appStatus.put(entry.getKey(), appInfo);
-        }
-        status.put("apps", appStatus);
-        
-        return status;
-    }
-
-    /**
      * 清除指定应用的缓冲区
+     * <p>
+     * 用于构建开始前清除旧日志，避免显示上次构建的日志
+     *
+     * @param appCode 应用编码
      */
     public void clearBuffer(String appCode) {
         AppLogBuffer buffer = appBuffers.remove(appCode);
@@ -423,4 +334,5 @@ public class LogBufferService implements CommandLineRunner {
         
         logger.info("日志缓冲服务已关闭");
     }
+
 }

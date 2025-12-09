@@ -11,6 +11,19 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 版本构建控制器
+ * <p>
+ * 提供应用版本构建管理接口，包括：
+ * <ul>
+ *   <li>版本配置的增删改查</li>
+ *   <li>构建任务的启动/停止</li>
+ *   <li>支持Git代码拉取、脚本执行、产物归档</li>
+ * </ul>
+ *
+ * @author aeye
+ * @since 1.0.0
+ */
 @RestController
 @RequestMapping("/verBuild")
 public class VerBuildController {
@@ -21,6 +34,12 @@ public class VerBuildController {
     @Autowired
     private BuildTaskService buildTaskService;
 
+    /**
+     * 搜索版本配置列表
+     *
+     * @param appName 应用名称过滤条件（可选，支持模糊匹配）
+     * @return 版本配置列表
+     */
     @GetMapping("/search")
     public ResponseEntity<Map<String, Object>> searchVersions(@RequestParam(required = false) String appName) {
         try {
@@ -44,6 +63,14 @@ public class VerBuildController {
         }
     }
 
+    /**
+     * 启动构建任务
+     * <p>
+     * 异步执行构建流程：Git拉取 -> 执行构建脚本 -> 归档产物
+     *
+     * @param request 请求参数：appCode-应用编码，branchOrTag-分支或Tag名称
+     * @return 启动结果
+     */
     @PostMapping("/build")
     public ResponseEntity<Map<String, Object>> startBuild(@RequestBody Map<String, String> request) {
         try {
@@ -100,6 +127,14 @@ public class VerBuildController {
         }
     }
 
+    /**
+     * 保存版本配置
+     * <p>
+     * 新增或更新版本构建配置信息
+     *
+     * @param verInfo 版本配置信息
+     * @return 保存结果
+     */
     @PostMapping("/save")
     public ResponseEntity<Map<String, Object>> saveVersion(@RequestBody VerInfo verInfo) {
         try {
@@ -124,6 +159,12 @@ public class VerBuildController {
         }
     }
 
+    /**
+     * 删除版本配置
+     *
+     * @param request 请求参数：appCode-应用编码
+     * @return 删除结果
+     */
     @PostMapping("/delete")
     public ResponseEntity<Map<String, Object>> deleteVersion(@RequestBody Map<String, String> request) {
         try {
@@ -149,6 +190,14 @@ public class VerBuildController {
         }
     }
 
+    /**
+     * 停止构建任务
+     * <p>
+     * 终止正在执行的构建进程
+     *
+     * @param request 请求参数：appCode-应用编码
+     * @return 停止结果
+     */
     @PostMapping("/stop")
     public ResponseEntity<Map<String, Object>> stopBuild(@RequestBody Map<String, String> request) {
         try {

@@ -1,7 +1,16 @@
+<!--
+  版本构建管理页面
+  
+  功能：
+  - 版本配置列表展示
+  - 版本配置的增删改
+  - 构建任务的启动/停止
+  - 构建日志实时查看
+-->
 <template>
   <div class="page-container">
     <el-card>
-      <!-- 搜索区域 -->
+      <!-- 搜索和操作按钮区域 -->
       <el-row :gutter="20" style="margin-bottom: 15px;">
         <el-col :span="12">
           <el-input
@@ -160,26 +169,34 @@ export default {
   name: 'VerMgt',
   components: { LogModal },
   setup() {
-    const searchTerm = ref('')
-    const versionList = ref([])
-    const loading = ref(false)
-    const currentVersion = ref({})
-    const buildDialogVisible = ref(false)
-    const buildForm = ref({ branchOrTag: '' })
-    const editDialogVisible = ref(false)
-    const isEdit = ref(false)
-    const editForm = ref({ 
+    // ========== 响应式状态 ==========
+    const searchTerm = ref('')             // 搜索关键词
+    const versionList = ref([])            // 版本列表数据
+    const loading = ref(false)             // 加载状态
+    const currentVersion = ref({})         // 当前操作的版本
+    const buildDialogVisible = ref(false)  // 构建对话框显示状态
+    const buildForm = ref({ branchOrTag: '' }) // 构建表单
+    const editDialogVisible = ref(false)   // 编辑对话框显示状态
+    const isEdit = ref(false)              // 是否为编辑模式
+    const editForm = ref({                 // 编辑表单
       appCode: '', appName: '', appType: '', 
       gitUrl: '', gitAcct: '', gitPwd: '', 
       buildScript: '', archiveFiles: ''
     })
-    const logModal = ref(null)
-    const selectedRow = ref(null)
+    const logModal = ref(null)             // 日志模态框引用
+    const selectedRow = ref(null)          // 当前选中的行
 
+    /**
+     * 表格行选中事件处理
+     */
     const handleCurrentChange = (row) => {
       selectedRow.value = row
     }
 
+    /**
+     * 计算属性：排序后的版本列表
+     * 数字编码优先，按数值排序；字符串编码按字母排序
+     */
     const sortedVersionList = computed(() => {
       return [...versionList.value].sort((a, b) => {
         const aIsNumber = !isNaN(a.appCode) && !isNaN(parseInt(a.appCode))
@@ -191,6 +208,9 @@ export default {
       })
     })
 
+    /**
+     * 搜索版本列表
+     */
     const searchVersions = async () => {
       loading.value = true
       try {
@@ -203,21 +223,25 @@ export default {
       }
     }
 
+    /**
+     * 打开构建对话框
+     */
     const buildApp = (version) => {
       currentVersion.value = version
       buildForm.value.branchOrTag = version.version || 'master'
       buildDialogVisible.value = true
     }
 
+    /**
+     * 确认启动构建
+     */
     const confirmBuild = async () => {
       if (!buildForm.value.branchOrTag.trim()) {
         ElMessage.warning('请输入分支名或Tag')
         return
       }
       try {
-        // 构建前先清除缓存
-        await logApi.flushBuffer()
-        
+
         const response = await verBuildApi.build({
           appCode: currentVersion.value.appCode,
           appName: currentVersion.value.appName,
@@ -239,6 +263,9 @@ export default {
       }
     }
 
+    /**
+     * 停止构建任务
+     */
     const stopApp = async (version) => {
       try {
         await ElMessageBox.confirm(
@@ -247,8 +274,6 @@ export default {
           { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
         )
         await verBuildApi.stop({ appCode: version.appCode })
-        // 停止后立即保存日志到数据库
-        await logApi.flushBuffer()
         ElMessage.success('停止操作已执行，日志已保存')
         searchVersions()
       } catch (error) {
@@ -258,15 +283,24 @@ export default {
       }
     }
 
+    /**
+     * 查看构建日志
+     */
     const viewLogs = (version) => {
       logModal.value.showLog(version.appCode)
     }
 
+    /**
+     * 格式化日期时间
+     */
     const formatDateTime = (dateTimeStr) => {
       if (!dateTimeStr) return '-'
       return new Date(dateTimeStr).toLocaleString('zh-CN')
     }
 
+    /**
+     * 打开新增版本对话框
+     */
     const addVersion = () => {
       isEdit.value = false
       editForm.value = { 
@@ -277,6 +311,9 @@ export default {
       editDialogVisible.value = true
     }
 
+    /**
+     * 打开编辑版本对话框
+     */
     const editVersion = (row) => {
       if (!row) {
         ElMessage.warning('请先选择要修改的记录')
@@ -296,6 +333,9 @@ export default {
       editDialogVisible.value = true
     }
 
+    /**
+     * 保存版本配置
+     */
     const saveVersion = async () => {
       if (!editForm.value.appCode.trim()) {
         ElMessage.warning('请输入应用编码')
@@ -311,6 +351,9 @@ export default {
       }
     }
 
+    /**
+     * 删除版本配置
+     */
     const deleteVersion = async (row) => {
       if (!row) {
         ElMessage.warning('请先选择要删除的记录')

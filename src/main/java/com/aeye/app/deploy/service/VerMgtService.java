@@ -3,63 +3,36 @@ package com.aeye.app.deploy.service;
 import com.aeye.app.deploy.mapper.VerInfoMapper;
 import com.aeye.app.deploy.model.VerInfo;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.PostConstruct;
 import java.util.Date;
 import java.util.List;
 
+/**
+ * 版本管理服务
+ * <p>
+ * 提供版本构建配置的CRUD操作和状态管理。
+ *
+ * @author aeye
+ * @since 1.0.0
+ */
 @Service
 public class VerMgtService {
 
     @Autowired
     private VerInfoMapper verInfoMapper;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
+    /**
+     * 服务初始化
+     * <p>
+     * 应用启动时重置所有构建状态为就绪，防止异常中断导致的状态不一致
+     */
     @PostConstruct
     public void init() {
-        // 如果数据库为空，从JSON文件导入初始数据
-        if (verInfoMapper.selectCount(null) == 0) {
-            importFromJson();
-        }
-        // 启动时重置所有状态为就绪
-        resetAllStatus();
-    }
-
-    /**
-     * 从JSON文件导入数据到数据库
-     */
-    private void importFromJson() {
-        try {
-            ClassPathResource resource = new ClassPathResource("data/versions.json");
-            if (!resource.exists()) {
-                return;
-            }
-            List<VerInfo> versions = objectMapper.readValue(resource.getInputStream(), new TypeReference<List<VerInfo>>() {});
-            
-            for (VerInfo ver : versions) {
-                ver.setStatus("0");
-                verInfoMapper.insert(ver);
-            }
-            System.out.println("已从JSON导入 " + versions.size() + " 条版本数据到数据库");
-        } catch (Exception e) {
-            System.err.println("导入版本数据失败: " + e.getMessage());
-        }
-    }
-
-    /**
-     * 重置所有状态为就绪（使用批量更新提高性能）
-     */
-    private void resetAllStatus() {
-        // 使用 LambdaUpdateWrapper 批量更新，避免逐条更新
-        com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<VerInfo> updateWrapper = 
-            new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<>();
+        LambdaUpdateWrapper<VerInfo> updateWrapper = new LambdaUpdateWrapper<>();
         updateWrapper.set(VerInfo::getStatus, "0");
         verInfoMapper.update(null, updateWrapper);
     }
@@ -79,7 +52,12 @@ public class VerMgtService {
     }
 
     /**
-     * 更新状态
+     * 更新构建状态
+     *
+     * @param id     应用编码
+     * @param status 状态：0-就绪，1-构建中
+     * @param verNo  版本号（构建成功时更新）
+     * @return 更新后的版本信息
      */
     public VerInfo updateStatus(String id, String status, String verNo) {
         VerInfo verInfo = verInfoMapper.selectById(id);
@@ -130,4 +108,5 @@ public class VerMgtService {
     public void deleteVersion(String appCode) {
         verInfoMapper.deleteById(appCode);
     }
+
 }

@@ -15,11 +15,6 @@ const routes = [
     path: '/deploy/appMgt',
     name: 'AppMgt',
     component: () => import('../views/AppMgt.vue')
-  },
-  {
-    path: '/deploy/logMgt',
-    name: 'LogMgt',
-    component: () => import('../views/LogMgt.vue')
   }
 ]
 

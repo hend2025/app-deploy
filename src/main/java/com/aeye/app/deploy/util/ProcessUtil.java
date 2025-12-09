@@ -3,11 +3,28 @@ package com.aeye.app.deploy.util;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
+/**
+ * 进程操作工具类
+ * <p>
+ * 提供跨平台的进程管理功能，包括：
+ * <ul>
+ *   <li>获取所有运行中的Java进程</li>
+ *   <li>终止指定进程</li>
+ * </ul>
+ * 支持Windows（wmic/taskkill）和Linux（ps/kill）。
+ *
+ * @author aeye
+ * @since 1.0.0
+ */
 public class ProcessUtil {
     
     /**
-     * 批量获取所有Java进程ID（按应用名称映射）
-     * @return Map<应用名称, 进程ID>，如果未找到返回空Map
+     * 批量获取所有运行中的JAR进程
+     * <p>
+     * 通过系统命令获取所有Java进程，解析命令行参数提取应用名称。
+     * Windows使用wmic命令，Linux使用ps命令。
+     *
+     * @return 应用名称到进程ID的映射，如果未找到返回空Map
      */
     public static java.util.Map<String, String> getAllJarProcessIds() {
         java.util.Map<String, String> result = new java.util.HashMap<>();
@@ -107,7 +124,13 @@ public class ProcessUtil {
     }
     
     /**
-     * 从字符串中提取jar文件名，并返回应用编码（去掉版本号后缀）
+     * 从命令行字符串中提取JAR文件名
+     * <p>
+     * 解析命令行参数，提取JAR文件名作为应用编码。
+     * 注意：实际运行的JAR文件名格式为 appCode.jar（不带版本号）
+     *
+     * @param jarPart 包含JAR文件路径的字符串片段
+     * @return 应用编码（JAR文件名去掉.jar后缀），解析失败返回null
      */
     private static String extractJarFileName(String jarPart) {
         try {
@@ -148,6 +171,13 @@ public class ProcessUtil {
 
     /**
      * 从命令行输出中提取进程ID
+     * <p>
+     * Windows输出格式：CommandLine ProcessId
+     * Linux输出格式：PID CMD
+     *
+     * @param line 命令输出的一行
+     * @param os   操作系统名称
+     * @return 进程ID，解析失败返回null
      */
     private static String extractPid(String line, String os) {
         try {
@@ -167,9 +197,12 @@ public class ProcessUtil {
     }
 
     /**
-     * 停止指定进程ID的进程
+     * 终止指定进程
+     * <p>
+     * Windows使用taskkill /F强制终止，Linux使用kill -9。
+     *
      * @param pid 进程ID
-     * @return true表示成功，false表示失败
+     * @return true-终止成功，false-终止失败
      */
     public static boolean killProcess(String pid) {
         if (pid == null || pid.trim().isEmpty()) {

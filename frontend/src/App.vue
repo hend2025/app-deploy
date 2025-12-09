@@ -1,6 +1,15 @@
+<!--
+  根组件
+  
+  应用的顶层布局组件，包含：
+  - 顶部导航栏（Navbar）
+  - 路由视图容器（router-view）
+-->
 <template>
   <div id="app">
+    <!-- 顶部导航栏 -->
     <Navbar />
+    <!-- 路由页面容器 -->
     <router-view></router-view>
   </div>
 </template>

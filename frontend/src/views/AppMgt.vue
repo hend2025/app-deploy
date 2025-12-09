@@ -1,7 +1,16 @@
+<!--
+  应用管理页面
+  
+  功能：
+  - 应用列表展示（含实时运行状态）
+  - 应用配置的增删改
+  - 应用启动/停止操作
+  - 实时日志查看
+-->
 <template>
   <div class="page-container">
     <el-card>
-      <!-- 搜索区域 -->
+      <!-- 搜索和操作按钮区域 -->
       <el-row :gutter="20" style="margin-bottom: 15px;">
         <el-col :span="12">
           <el-input
@@ -158,23 +167,28 @@ export default {
   name: 'AppMgt',
   components: { LogModal },
   setup() {
-    const searchText = ref('')
-    const appList = ref([])
-    const loading = ref(false)
-    const currentApp = ref({})
-    const startDialogVisible = ref(false)
-    const stopDialogVisible = ref(false)
-    const startForm = ref({ version: '', params: '' })
-    const editDialogVisible = ref(false)
-    const isEdit = ref(false)
-    const editForm = ref({ appCode: '', version: '', params: '' })
-    const logModal = ref(null)
-    const selectedRow = ref(null)
+    // ========== 响应式状态 ==========
+    const searchText = ref('')            // 搜索关键词
+    const appList = ref([])               // 应用列表数据
+    const loading = ref(false)            // 加载状态
+    const currentApp = ref({})            // 当前操作的应用
+    const startDialogVisible = ref(false) // 启动对话框显示状态
+    const stopDialogVisible = ref(false)  // 停止对话框显示状态
+    const startForm = ref({ version: '', params: '' }) // 启动表单
+    const editDialogVisible = ref(false)  // 编辑对话框显示状态
+    const isEdit = ref(false)             // 是否为编辑模式
+    const editForm = ref({ appCode: '', version: '', params: '' }) // 编辑表单
+    const logModal = ref(null)            // 日志模态框引用
+    const selectedRow = ref(null)         // 当前选中的行
 
+    /**
+     * 表格行选中事件处理
+     */
     const handleCurrentChange = (row) => {
       selectedRow.value = row
     }
 
+    // 默认JVM启动参数模板
     const defaultParams = `-Xmx1048m
 -Xms512m
 -Dfile.encoding=utf-8
@@ -185,6 +199,10 @@ export default {
 -Dspring.cloud.nacos.config.namespace=hsa-ims-scen-hend
 -Dlogging.level.root=info`
 
+    /**
+     * 计算属性：排序后的应用列表
+     * 数字编码优先，按数值排序；字符串编码按字母排序
+     */
     const sortedAppList = computed(() => {
       return [...appList.value].sort((a, b) => {
         const aIsNumber = !isNaN(a.appCode) && !isNaN(parseInt(a.appCode))
@@ -196,6 +214,10 @@ export default {
       })
     })
 
+    /**
+     * 搜索应用列表
+     * @param {boolean} showLoading - 是否显示加载状态
+     */
     const searchApps = async (showLoading = true) => {
       if (showLoading) loading.value = true
       try {
@@ -208,6 +230,9 @@ export default {
       }
     }
 
+    /**
+     * 打开启动应用对话框
+     */
     const startApp = (app) => {
       currentApp.value = app
       startForm.value.version = app.version || '-'
@@ -215,6 +240,9 @@ export default {
       startDialogVisible.value = true
     }
 
+    /**
+     * 确认启动应用
+     */
     const confirmStart = async () => {
       try {
         await appMgtApi.startApp({
@@ -230,11 +258,17 @@ export default {
       }
     }
 
+    /**
+     * 打开停止应用对话框
+     */
     const stopApp = (app) => {
       currentApp.value = app
       stopDialogVisible.value = true
     }
 
+    /**
+     * 确认停止应用
+     */
     const confirmStop = async () => {
       try {
         await appMgtApi.stopApp({
@@ -249,26 +283,41 @@ export default {
       }
     }
 
+    /**
+     * 查看应用日志
+     */
     const viewLogs = (app) => {
       logModal.value.showLog(app.appCode)
     }
 
+    /**
+     * 获取状态显示文本
+     */
     const getStatusText = (status) => {
       const texts = { '1': '就绪', '2': '运行' }
       return texts[status] || '未知'
     }
 
+    /**
+     * 格式化日期时间
+     */
     const formatDateTime = (dateTimeStr) => {
       if (!dateTimeStr) return '-'
       return new Date(dateTimeStr).toLocaleString('zh-CN')
     }
 
+    /**
+     * 打开新增应用对话框
+     */
     const addApp = () => {
       isEdit.value = false
       editForm.value = { appCode: '', version: '', params: defaultParams }
       editDialogVisible.value = true
     }
 
+    /**
+     * 打开编辑应用对话框
+     */
     const editApp = (row) => {
       if (!row) {
         ElMessage.warning('请先选择要修改的记录')
@@ -283,6 +332,9 @@ export default {
       editDialogVisible.value = true
     }
 
+    /**
+     * 保存应用配置
+     */
     const saveApp = async () => {
       if (!editForm.value.appCode.trim()) {
         ElMessage.warning('请输入应用编码')
@@ -298,6 +350,9 @@ export default {
       }
     }
 
+    /**
+     * 删除应用配置
+     */
     const deleteApp = async (row) => {
       if (!row) {
         ElMessage.warning('请先选择要删除的记录')
