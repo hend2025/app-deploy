@@ -1,6 +1,6 @@
 package com.aeye.app.deploy.service;
 
-import com.aeye.app.deploy.model.VerInfo;
+import com.aeye.app.deploy.model.AppBuild;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,7 +12,6 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,7 +28,7 @@ public class BuildTaskService {
     private static final Logger logger = LoggerFactory.getLogger(BuildTaskService.class);
 
     @Autowired
-    private VerMgtService verMgtService;
+    private AppBuildService appBuildService;
     
     @Autowired
     private LogBufferService logBufferService;
@@ -96,7 +95,7 @@ public class BuildTaskService {
         return scriptFile;
     }
 
-    public void startBuild(VerInfo appVersion, String branchOrTag) {
+    public void startBuild(AppBuild appVersion, String branchOrTag) {
         String appCode = appVersion.getAppCode();
         
         // 检查是否已有构建任务在运行
@@ -126,7 +125,7 @@ public class BuildTaskService {
         }
         
         // 立即更新状态为构建中
-        verMgtService.updateStatus(appCode, "1", null);
+        appBuildService.updateStatus(appCode, "1", null);
         
         // 开始新的构建会话（清除缓存并递增打包次数）
         logBufferService.startNewSession(appCode, branchOrTag);
@@ -221,12 +220,12 @@ public class BuildTaskService {
                             (level, msg) -> logBufferService.addLog(appCode, branchOrTag, level, msg, new Date()));
                     }
                     
-                    verMgtService.updateStatus(appCode, "0", branchOrTag);
+                    appBuildService.updateStatus(appCode, "0", branchOrTag);
                 } else {
                     logger.warn("构建失败: {}, 分支/Tag: {}, 退出码: {}", appCode, branchOrTag, exitCode);
                     logBufferService.addLog(appCode, branchOrTag, "ERROR", 
                         String.format("构建失败，退出码: %d", exitCode), new Date());
-                    verMgtService.updateStatus(appCode, "0", null);
+                    appBuildService.updateStatus(appCode, "0", null);
                 }
 
             } catch (Exception e) {
@@ -234,7 +233,7 @@ public class BuildTaskService {
                 logBufferService.addLog(appCode, branchOrTag, "ERROR", 
                     "构建任务异常: " + e.getMessage(), new Date());
                 try {
-                    verMgtService.updateStatus(appCode, "0", null);
+                    appBuildService.updateStatus(appCode, "0", null);
                 } catch (Exception ex) {
                     logger.error("更新构建状态失败: {}", appCode, ex);
                 }
@@ -424,7 +423,7 @@ public class BuildTaskService {
                     logger.warn("构建任务未在3秒内结束，强制终止: {}", appCode);
                     process.destroyForcibly();
                 }
-                verMgtService.updateStatus(appCode, "0", null);
+                appBuildService.updateStatus(appCode, "0", null);
                 return true;
             } catch (Exception e) {
                 logger.error("停止构建任务失败: {}", appCode, e);

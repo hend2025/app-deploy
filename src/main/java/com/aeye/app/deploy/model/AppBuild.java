@@ -9,8 +9,8 @@ import lombok.Data;
 import java.util.Date;
 
 @Data
-@TableName("t_ver_info")
-public class VerInfo {
+@TableName("t_app_build")
+public class AppBuild {
 
     /**
      * 应用编码（主键）

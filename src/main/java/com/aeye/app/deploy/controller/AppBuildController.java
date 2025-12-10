@@ -1,7 +1,7 @@
 package com.aeye.app.deploy.controller;
 
-import com.aeye.app.deploy.model.VerInfo;
-import com.aeye.app.deploy.service.VerMgtService;
+import com.aeye.app.deploy.model.AppBuild;
+import com.aeye.app.deploy.service.AppBuildService;
 import com.aeye.app.deploy.service.BuildTaskService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,13 +14,13 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/verBuild")
-public class VerBuildController {
+@RequestMapping("/appBuild")
+public class AppBuildController {
 
-    private static final Logger logger = LoggerFactory.getLogger(VerBuildController.class);
+    private static final Logger logger = LoggerFactory.getLogger(AppBuildController.class);
 
     @Autowired
-    private VerMgtService verMgtService;
+    private AppBuildService appBuildService;
 
     @Autowired
     private BuildTaskService buildTaskService;
@@ -42,15 +42,15 @@ public class VerBuildController {
     @GetMapping("/search")
     public ResponseEntity<Map<String, Object>> searchVersions(@RequestParam(required = false) String appName) {
         try {
-            List<VerInfo> versions;
+            List<AppBuild> versions;
             if (appName != null && !appName.trim().isEmpty()) {
-                versions = verMgtService.searchVersionsByAppName(appName);
+                versions = appBuildService.searchVersionsByAppName(appName);
             } else {
-                versions = verMgtService.getAllVersions();
+                versions = appBuildService.getAllVersions();
             }
             
             // 隐藏敏感信息（Git密码）
-            for (VerInfo ver : versions) {
+            for (AppBuild ver : versions) {
                 if (ver.getGitPwd() != null && !ver.getGitPwd().isEmpty()) {
                     ver.setGitPwd("******");
                 }
@@ -71,7 +71,7 @@ public class VerBuildController {
     }
 
     @PostMapping("/save")
-    public ResponseEntity<Map<String, Object>> saveVersion(@RequestBody VerInfo verInfo) {
+    public ResponseEntity<Map<String, Object>> saveVersion(@RequestBody AppBuild verInfo) {
         try {
             if (verInfo.getAppCode() == null || verInfo.getAppCode().trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
@@ -90,13 +90,13 @@ public class VerBuildController {
             
             // 如果密码是掩码，则保留原密码
             if ("******".equals(verInfo.getGitPwd())) {
-                VerInfo existing = verMgtService.getVersionById(verInfo.getAppCode());
+                AppBuild existing = appBuildService.getVersionById(verInfo.getAppCode());
                 if (existing != null) {
                     verInfo.setGitPwd(existing.getGitPwd());
                 }
             }
 
-            verMgtService.saveVersion(verInfo);
+            appBuildService.saveVersion(verInfo);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -122,7 +122,7 @@ public class VerBuildController {
                 return ResponseEntity.ok(response);
             }
 
-            verMgtService.deleteVersion(appCode);
+            appBuildService.deleteVersion(appCode);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -166,7 +166,7 @@ public class VerBuildController {
             }
 
             // 获取应用信息
-            VerInfo appVersion = verMgtService.getVersionById(appCode);
+            AppBuild appVersion = appBuildService.getVersionById(appCode);
             if (appVersion == null) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
@@ -221,7 +221,7 @@ public class VerBuildController {
             }
 
             // 获取应用信息
-            VerInfo appVersion = verMgtService.getVersionById(appCode);
+            AppBuild appVersion = appBuildService.getVersionById(appCode);
             if (appVersion == null) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);

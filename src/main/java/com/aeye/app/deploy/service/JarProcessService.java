@@ -1,6 +1,6 @@
 package com.aeye.app.deploy.service;
 
-import com.aeye.app.deploy.model.AppInfo;
+import com.aeye.app.deploy.model.AppDeploy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,7 +11,6 @@ import javax.annotation.PreDestroy;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -36,7 +35,7 @@ public class JarProcessService {
     private int maxConcurrentStartups;
     
     @Autowired
-    private AppMgtService appMgtService;
+    private AppDeployService appDeployService;
     
     @Autowired
     private LogBufferService logBufferService;
@@ -159,11 +158,11 @@ public class JarProcessService {
                 Process process = processBuilder.start();
 
                 // 更新应用信息
-                AppInfo appInfo = appMgtService.getAppByCode(appCode);
+                AppDeploy appInfo = appDeployService.getAppByCode(appCode);
                 if (appInfo != null) {
                     appInfo.setParams(params);
                     appInfo.setVersion(version);
-                    appMgtService.saveApp(appInfo);
+                    appDeployService.saveApp(appInfo);
                 } else {
                     logger.warn("应用信息不存在，无法更新: {}", appCode);
                 }

@@ -1,7 +1,7 @@
 package com.aeye.app.deploy.service;
 
-import com.aeye.app.deploy.mapper.VerInfoMapper;
-import com.aeye.app.deploy.model.VerInfo;
+import com.aeye.app.deploy.mapper.AppBuildMapper;
+import com.aeye.app.deploy.model.AppBuild;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,10 +21,10 @@ import java.util.List;
  * @since 1.0.0
  */
 @Service
-public class VerMgtService {
+public class AppBuildService {
 
     @Autowired
-    private VerInfoMapper verInfoMapper;
+    private AppBuildMapper appBuildMapper;
 
     /**
      * 服务初始化
@@ -33,23 +33,23 @@ public class VerMgtService {
      */
     @PostConstruct
     public void init() {
-        LambdaUpdateWrapper<VerInfo> updateWrapper = new LambdaUpdateWrapper<>();
-        updateWrapper.set(VerInfo::getStatus, "0");
-        verInfoMapper.update(null, updateWrapper);
+        LambdaUpdateWrapper<AppBuild> updateWrapper = new LambdaUpdateWrapper<>();
+        updateWrapper.set(AppBuild::getStatus, "0");
+        appBuildMapper.update(null, updateWrapper);
     }
 
     /**
      * 获取所有版本信息
      */
-    public List<VerInfo> getAllVersions() {
-        return verInfoMapper.selectList(null);
+    public List<AppBuild> getAllVersions() {
+        return appBuildMapper.selectList(null);
     }
 
     /**
      * 根据ID获取版本信息
      */
-    public VerInfo getVersionById(String id) {
-        return verInfoMapper.selectById(id);
+    public AppBuild getVersionById(String id) {
+        return appBuildMapper.selectById(id);
     }
 
     /**
@@ -60,8 +60,8 @@ public class VerMgtService {
      * @param verNo  版本号（构建成功时更新）
      * @return 更新后的版本信息
      */
-    public VerInfo updateStatus(String id, String status, String verNo) {
-        VerInfo verInfo = verInfoMapper.selectById(id);
+    public AppBuild updateStatus(String id, String status, String verNo) {
+        AppBuild verInfo = appBuildMapper.selectById(id);
         if (verInfo == null) {
             return null;
         }
@@ -72,7 +72,7 @@ public class VerMgtService {
             verInfo.setVersion(verNo);
         }
 
-        verInfoMapper.updateById(verInfo);
+        appBuildMapper.updateById(verInfo);
         return verInfo;
     }
 
@@ -81,26 +81,26 @@ public class VerMgtService {
     /**
      * 根据应用名称搜索版本
      */
-    public List<VerInfo> searchVersionsByAppName(String appName) {
+    public List<AppBuild> searchVersionsByAppName(String appName) {
         if (appName == null || appName.trim().isEmpty()) {
             return getAllVersions();
         }
-        LambdaQueryWrapper<VerInfo> wrapper = new LambdaQueryWrapper<>();
-        wrapper.like(VerInfo::getAppName, appName);
-        return verInfoMapper.selectList(wrapper);
+        LambdaQueryWrapper<AppBuild> wrapper = new LambdaQueryWrapper<>();
+        wrapper.like(AppBuild::getAppName, appName);
+        return appBuildMapper.selectList(wrapper);
     }
 
     /**
      * 保存版本信息
      */
     @Transactional(rollbackFor = Exception.class)
-    public void saveVersion(VerInfo verInfo) {
+    public void saveVersion(AppBuild verInfo) {
         verInfo.setUpdateTime(new Date());
-        VerInfo existing = verInfoMapper.selectById(verInfo.getAppCode());
+        AppBuild existing = appBuildMapper.selectById(verInfo.getAppCode());
         if (existing != null) {
-            verInfoMapper.updateById(verInfo);
+            appBuildMapper.updateById(verInfo);
         } else {
-            verInfoMapper.insert(verInfo);
+            appBuildMapper.insert(verInfo);
         }
     }
 
@@ -109,7 +109,7 @@ public class VerMgtService {
      */
     @Transactional(rollbackFor = Exception.class)
     public void deleteVersion(String appCode) {
-        verInfoMapper.deleteById(appCode);
+        appBuildMapper.deleteById(appCode);
     }
 
 }

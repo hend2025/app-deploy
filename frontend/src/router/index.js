@@ -2,19 +2,19 @@ import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
   {
-    path: '/',
+    path: '/deploy',
     name: 'root',
-    component: () => import('../views/VerMgt.vue')
+    component: () => import('../views/AppBuild.vue')
   },
   {
-    path: '/deploy/',
-    name: 'VerMgt',
-    component: () => import('../views/VerMgt.vue')
+    path: '/deploy/appBuild',
+    name: 'AppBuild',
+    component: () => import('../views/AppBuild.vue')
   },
   {
-    path: '/deploy/appMgt',
-    name: 'AppMgt',
-    component: () => import('../views/AppMgt.vue')
+    path: '/deploy/appDeploy',
+    name: 'AppDeploy',
+    component: () => import('../views/AppDeploy.vue')
   },
   {
     path: '/deploy/logFiles',

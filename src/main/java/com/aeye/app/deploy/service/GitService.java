@@ -1,7 +1,5 @@
 package com.aeye.app.deploy.service;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -9,22 +7,9 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
-import java.util.Date;
 import java.util.function.BiConsumer;
 
-/**
- * Git操作服务
- * <p>
- * 提供Git仓库的克隆和更新功能，支持：
- * <ul>
- *   <li>HTTP/HTTPS协议的仓库认证</li>
- *   <li>分支/Tag切换</li>
- *   <li>增量更新（已存在仓库时执行fetch+checkout）</li>
- * </ul>
- *
- * @author aeye
- * @since 1.0.0
- */
+
 @Service
 public class GitService {
 

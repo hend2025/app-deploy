@@ -100,7 +100,7 @@ export const appMgtApi = {
    * @param {string} appCode - 应用编码过滤条件（可选）
    */
   getAppList(appCode = '') {
-    return api.get('/appMgt/list', { params: { appCode } })
+    return api.get('/appDeploy/list', { params: { appCode } })
   },
   
   /**
@@ -108,7 +108,7 @@ export const appMgtApi = {
    * @param {Object} data - { appCode, version, params }
    */
   startApp(data) {
-    return api.post('/appMgt/start', data)
+    return api.post('/appDeploy/start', data)
   },
   
   /**
@@ -116,7 +116,7 @@ export const appMgtApi = {
    * @param {Object} data - { appCode, pid }
    */
   stopApp(data) {
-    return api.post('/appMgt/stop', data)
+    return api.post('/appDeploy/stop', data)
   },
   
   /**
@@ -124,7 +124,7 @@ export const appMgtApi = {
    * @param {Object} data - 应用配置信息
    */
   saveApp(data) {
-    return api.post('/appMgt/save', data)
+    return api.post('/appDeploy/save', data)
   },
   
   /**
@@ -132,7 +132,7 @@ export const appMgtApi = {
    * @param {Object} data - { appCode }
    */
   deleteApp(data) {
-    return api.post('/appMgt/delete', data)
+    return api.post('/appDeploy/delete', data)
   }
 }
 
@@ -146,7 +146,7 @@ export const verBuildApi = {
    * @param {string} appName - 应用名称过滤条件（可选）
    */
   search(appName = '') {
-    return api.get('/verBuild/search', { params: { appName } })
+    return api.get('/appBuild/search', { params: { appName } })
   },
   
   /**
@@ -154,7 +154,7 @@ export const verBuildApi = {
    * @param {Object} data - { appCode, branchOrTag }
    */
   build(data) {
-    return api.post('/verBuild/build', data)
+    return api.post('/appBuild/build', data)
   },
   
   /**
@@ -162,7 +162,7 @@ export const verBuildApi = {
    * @param {Object} data - { appCode }
    */
   stop(data) {
-    return api.post('/verBuild/stop', data)
+    return api.post('/appBuild/stop', data)
   },
   
   /**
@@ -170,7 +170,7 @@ export const verBuildApi = {
    * @param {Object} data - 版本配置信息
    */
   saveVersion(data) {
-    return api.post('/verBuild/save', data)
+    return api.post('/appBuild/save', data)
   },
   
   /**
@@ -178,7 +178,7 @@ export const verBuildApi = {
    * @param {Object} data - { appCode }
    */
   deleteVersion(data) {
-    return api.post('/verBuild/delete', data)
+    return api.post('/appBuild/delete', data)
   }
 }
 

@@ -15,8 +15,8 @@
     <!-- 弹性占位，将导航项推到右侧 -->
     <div style="flex-grow: 1;"></div>
     <!-- 导航菜单项 -->
-    <el-menu-item index="/deploy/">版本构建</el-menu-item>
-    <el-menu-item index="/deploy/appMgt">应用启动</el-menu-item>
+    <el-menu-item index="/deploy/appBuild">版本构建</el-menu-item>
+    <el-menu-item index="/deploy/appDeploy">应用启动</el-menu-item>
     <el-menu-item index="/deploy/logFiles">日志文件</el-menu-item>
   </el-menu>
 </template>

@@ -10,13 +10,11 @@ import lombok.Data;
 import java.util.Date;
 
 @Data
-@TableName("t_app_log")
 public class AppLog {
 
     /**
      * 日志ID（自增主键）
      */
-    @TableId(value = "log_id", type = IdType.AUTO)
     private Long logId;
 
     /**

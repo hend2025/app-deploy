@@ -157,7 +157,7 @@ import LogModal from '../components/LogModal.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 export default {
-  name: 'VerMgt',
+  name: 'AppDeploy',
   components: { LogModal },
   setup() {
     // ========== 响应式状态 ==========

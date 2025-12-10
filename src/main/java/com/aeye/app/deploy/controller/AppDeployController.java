@@ -1,7 +1,7 @@
 package com.aeye.app.deploy.controller;
 
-import com.aeye.app.deploy.model.AppInfo;
-import com.aeye.app.deploy.service.AppMgtService;
+import com.aeye.app.deploy.model.AppDeploy;
+import com.aeye.app.deploy.service.AppDeployService;
 import com.aeye.app.deploy.service.JarProcessService;
 import com.aeye.app.deploy.util.ProcessUtil;
 import org.slf4j.Logger;
@@ -15,13 +15,13 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
-@RequestMapping("/appMgt")
-public class AppMgtController {
+@RequestMapping("/appDeploy")
+public class AppDeployController {
 
-    private static final Logger logger = LoggerFactory.getLogger(AppMgtController.class);
+    private static final Logger logger = LoggerFactory.getLogger(AppDeployController.class);
 
     @Autowired
-    private AppMgtService appMgtService;
+    private AppDeployService appDeployService;
 
     @Autowired
     private JarProcessService jarProcessService;
@@ -67,7 +67,7 @@ public class AppMgtController {
     @ResponseBody
     public ResponseEntity<Map<String, Object>> getAppList(@RequestParam(required = false) String appName) {
         try {
-            List<AppInfo> allApps = appMgtService.getAllApps();
+            List<AppDeploy> allApps = appDeployService.getAllApps();
             
             // 如果指定了应用名称，进行过滤
             if (appName != null && !appName.trim().isEmpty()) {
@@ -82,7 +82,7 @@ public class AppMgtController {
             // 转换为前端需要的格式并检查进程状态
             List<Map<String, Object>> resultList = new ArrayList<>();
             
-            for (AppInfo appInfo : allApps) {
+            for (AppDeploy appInfo : allApps) {
                 Map<String, Object> appMap = new HashMap<>();
                 
                 // 设置应用基本信息
@@ -159,7 +159,7 @@ public class AppMgtController {
                 return ResponseEntity.ok(response);
             }
 
-            AppInfo appInfo = appMgtService.getAppByCode(appCode);
+            AppDeploy appInfo = appDeployService.getAppByCode(appCode);
             if (appInfo == null) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
@@ -200,7 +200,7 @@ public class AppMgtController {
      */
     @PostMapping("/save")
     @ResponseBody
-    public ResponseEntity<Map<String, Object>> saveApp(@RequestBody AppInfo appInfo) {
+    public ResponseEntity<Map<String, Object>> saveApp(@RequestBody AppDeploy appInfo) {
         try {
             if (appInfo.getAppCode() == null || appInfo.getAppCode().trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
@@ -209,7 +209,7 @@ public class AppMgtController {
                 return ResponseEntity.ok(response);
             }
 
-            appMgtService.saveApp(appInfo);
+            appDeployService.saveApp(appInfo);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -242,7 +242,7 @@ public class AppMgtController {
                 return ResponseEntity.ok(response);
             }
 
-            appMgtService.deleteApp(appCode);
+            appDeployService.deleteApp(appCode);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -309,14 +309,14 @@ public class AppMgtController {
     /**
      * 批量获取进程状态，减少系统调用（只调用一次系统命令）
      */
-    private Map<String, String> batchGetProcessStatus(List<AppInfo> apps) {
+    private Map<String, String> batchGetProcessStatus(List<AppDeploy> apps) {
         Map<String, String> result = new HashMap<>();
         
         // 检查缓存，找出需要更新的应用
         List<String> appsToCheck = new ArrayList<>();
         long currentTime = System.currentTimeMillis();
         
-        for (AppInfo app : apps) {
+        for (AppDeploy app : apps) {
             String appCode = app.getAppCode();
             CachedProcessInfo cached = processCache.get(appCode);
             

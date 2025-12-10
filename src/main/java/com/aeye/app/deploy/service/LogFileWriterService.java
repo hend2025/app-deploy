@@ -228,7 +228,7 @@ public class LogFileWriterService implements CommandLineRunner {
     /**
      * 写入日志到文件
      */
-    private void writeLogsToFile(String appCode, List<AppLog> logs, 
+    private void writeLogsToFile(String appCode, List<AppLog> logs,
                                   LogFileBuffer buffer) {
         if (logs.isEmpty()) {
             return;
