@@ -5,11 +5,11 @@
       <el-row :gutter="20" style="margin-bottom: 15px;">
         <el-col :span="12">
           <el-input
-            v-model="searchText"
-            placeholder="输入应用名称搜索..."
-            @keypress.enter="searchApps"
-            clearable
-            size="large"
+              v-model="searchText"
+              placeholder="输入应用名称搜索..."
+              @keypress.enter="searchApps"
+              clearable
+              size="large"
           >
             <template #prepend>搜索应用</template>
             <template #append>
@@ -25,19 +25,24 @@
       </el-row>
 
       <!-- 应用列表 -->
-      <el-table 
-        :data="sortedAppList" 
-        v-loading="loading" 
-        stripe 
-        border 
-        size="large"
-        highlight-current-row
-        @current-change="handleCurrentChange"
+      <el-table
+          :data="sortedAppList"
+          v-loading="loading"
+          stripe
+          border
+          size="large"
+          highlight-current-row
+          @current-change="handleCurrentChange"
       >
         <el-table-column type="index" width="70" label="序号" align="center" />
-        <el-table-column prop="appCode" label="应用名称">
+        <el-table-column prop="svcCode" label="微服务编码">
           <template #default="{ row }">
-            <strong>{{ row.appCode }}</strong>
+            <strong>{{ row.svcCode }}</strong>
+          </template>
+        </el-table-column>
+        <el-table-column prop="appCode" label="所属应用">
+          <template #default="{ row }">
+            {{ getAppName(row.appCode) }}
           </template>
         </el-table-column>
         <el-table-column prop="version" label="版本号">
@@ -69,13 +74,20 @@
 
     <!-- 启动应用对话框 -->
     <el-dialog v-model="startDialogVisible" title="启动应用" width="700px">
-      <el-form label-width="80px">
+      <el-form label-width="100px">
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="应用编码">
+            <el-form-item label="微服务编码">
+              <el-input :model-value="currentApp.svcCode" readonly />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="所属应用">
               <el-input :model-value="currentApp.appCode" readonly />
             </el-form-item>
           </el-col>
+        </el-row>
+        <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="版本号">
               <el-input v-model="startForm.version" />
@@ -84,10 +96,10 @@
         </el-row>
         <el-form-item label="启动参数">
           <el-input
-            v-model="startForm.params"
-            type="textarea"
-            :rows="10"
-            style="font-family: monospace;"
+              v-model="startForm.params"
+              type="textarea"
+              :rows="10"
+              style="font-family: monospace;"
           />
           <div class="el-form-item__help">支持多行输入，每行一个参数</div>
         </el-form-item>
@@ -104,7 +116,7 @@
         <template #title>此操作将强制终止应用进程</template>
       </el-alert>
       <el-descriptions :column="1" border>
-        <el-descriptions-item label="应用名称">{{ currentApp.appCode }}</el-descriptions-item>
+        <el-descriptions-item label="微服务编码">{{ currentApp.svcCode }}</el-descriptions-item>
         <el-descriptions-item label="进程ID">
           <el-tag type="danger">{{ currentApp.pid }}</el-tag>
         </el-descriptions-item>
@@ -119,14 +131,28 @@
     </el-dialog>
 
     <!-- 新增/编辑应用对话框 -->
-    <el-dialog v-model="editDialogVisible" :title="isEdit ? '编辑应用' : '新增应用'" width="700px">
+    <el-dialog v-model="editDialogVisible" :title="isEdit ? '编辑应用' : '新增应用'" width="1000px">
       <el-form :model="editForm" label-width="100px">
         <el-row :gutter="20">
           <el-col :span="12">
-            <el-form-item label="应用编码" required>
-              <el-input v-model="editForm.appCode" :disabled="isEdit" placeholder="请输入应用编码" />
+            <el-form-item label="微服务编码" required>
+              <el-input v-model="editForm.svcCode" :disabled="isEdit" placeholder="请输入微服务编码" />
             </el-form-item>
           </el-col>
+          <el-col :span="12">
+            <el-form-item label="所属应用">
+              <el-select v-model="editForm.appCode" placeholder="请选择所属应用" clearable filterable style="width: 100%;">
+                <el-option
+                    v-for="item in appBuildList"
+                    :key="item.appCode"
+                    :label="item.appName || item.appCode"
+                    :value="item.appCode"
+                />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-row :gutter="20">
           <el-col :span="12">
             <el-form-item label="版本号">
               <el-input v-model="editForm.version" placeholder="请输入版本号" />
@@ -134,7 +160,7 @@
           </el-col>
         </el-row>
         <el-form-item label="启动参数">
-          <el-input v-model="editForm.params" type="textarea" :rows="10" placeholder="启动参数，每行一个" style="font-family: monospace;" />
+          <el-input v-model="editForm.params" type="textarea" :rows="15" placeholder="启动参数，每行一个" style="font-family: monospace;" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -150,7 +176,7 @@
 
 <script>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { appMgtApi } from '../api'
+import { appMgtApi, verBuildApi } from '../api'
 import LogModal from '../components/LogModal.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
@@ -161,6 +187,7 @@ export default {
     // ========== 响应式状态 ==========
     const searchText = ref('')            // 搜索关键词
     const appList = ref([])               // 应用列表数据
+    const appBuildList = ref([])          // 应用构建列表（用于下拉框）
     const loading = ref(false)            // 加载状态
     const currentApp = ref({})            // 当前操作的应用
     const startDialogVisible = ref(false) // 启动对话框显示状态
@@ -168,7 +195,7 @@ export default {
     const startForm = ref({ version: '', params: '' }) // 启动表单
     const editDialogVisible = ref(false)  // 编辑对话框显示状态
     const isEdit = ref(false)             // 是否为编辑模式
-    const editForm = ref({ appCode: '', version: '', params: '' }) // 编辑表单
+    const editForm = ref({ svcCode: '', appCode: '', version: '', params: '' }) // 编辑表单
     const logModal = ref(null)            // 日志模态框引用
     const selectedRow = ref(null)         // 当前选中的行
 
@@ -194,12 +221,14 @@ export default {
      * 排序比较函数（提取为独立函数避免重复创建）
      */
     const sortByAppCode = (a, b) => {
-      const aIsNumber = !isNaN(a.appCode) && !isNaN(parseInt(a.appCode))
-      const bIsNumber = !isNaN(b.appCode) && !isNaN(parseInt(b.appCode))
-      if (aIsNumber && bIsNumber) return parseInt(a.appCode) - parseInt(b.appCode)
+      const aCode = a.svcCode || ''
+      const bCode = b.svcCode || ''
+      const aIsNumber = !isNaN(aCode) && !isNaN(parseInt(aCode))
+      const bIsNumber = !isNaN(bCode) && !isNaN(parseInt(bCode))
+      if (aIsNumber && bIsNumber) return parseInt(aCode) - parseInt(bCode)
       if (aIsNumber && !bIsNumber) return -1
       if (!aIsNumber && bIsNumber) return 1
-      return a.appCode.localeCompare(b.appCode)
+      return aCode.localeCompare(bCode)
     }
 
     /**
@@ -242,11 +271,11 @@ export default {
     const confirmStart = async () => {
       try {
         await appMgtApi.startApp({
-          appCode: currentApp.value.appCode,
+          svcCode: currentApp.value.svcCode,
           version: startForm.value.version,
           params: startForm.value.params
         })
-        ElMessage.success(`应用启动成功: ${currentApp.value.appCode}`)
+        ElMessage.success(`应用启动成功: ${currentApp.value.svcCode}`)
         startDialogVisible.value = false
         setTimeout(() => searchApps(false), 1000)
       } catch (error) {
@@ -268,7 +297,7 @@ export default {
     const confirmStop = async () => {
       try {
         await appMgtApi.stopApp({
-          appCode: currentApp.value.appCode,
+          svcCode: currentApp.value.svcCode,
           pid: currentApp.value.pid
         })
         ElMessage.success('应用已停止')
@@ -283,7 +312,7 @@ export default {
      * 查看应用日志
      */
     const viewLogs = (app) => {
-      logModal.value.showLog(app.appCode)
+      logModal.value.showLog(app.svcCode)
     }
 
     /**
@@ -307,7 +336,7 @@ export default {
      */
     const addApp = () => {
       isEdit.value = false
-      editForm.value = { appCode: '', version: '', params: defaultParams }
+      editForm.value = { svcCode: '', appCode: '', version: '', params: defaultParams }
       editDialogVisible.value = true
     }
 
@@ -320,9 +349,10 @@ export default {
         return
       }
       isEdit.value = true
-      editForm.value = { 
-        appCode: row.appCode, 
-        version: row.version || '', 
+      editForm.value = {
+        svcCode: row.svcCode || '',
+        appCode: row.appCode || '',
+        version: row.version || '',
         params: row.params || defaultParams
       }
       editDialogVisible.value = true
@@ -332,8 +362,8 @@ export default {
      * 保存应用配置
      */
     const saveApp = async () => {
-      if (!editForm.value.appCode.trim()) {
-        ElMessage.warning('请输入应用编码')
+      if (!editForm.value.svcCode.trim()) {
+        ElMessage.warning('请输入微服务编码')
         return
       }
       try {
@@ -356,11 +386,11 @@ export default {
       }
       try {
         await ElMessageBox.confirm(
-          `确定要删除应用 "${row.appCode}" 吗？`,
-          '删除确认',
-          { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+            `确定要删除应用 "${row.svcCode}" 吗？`,
+            '删除确认',
+            { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
         )
-        await appMgtApi.deleteApp({ appCode: row.appCode })
+        await appMgtApi.deleteApp({ svcCode: row.svcCode })
         ElMessage.success('删除成功')
         selectedRow.value = null
         searchApps()
@@ -371,14 +401,39 @@ export default {
       }
     }
 
-    onMounted(() => { searchApps() })
+    /**
+     * 加载应用构建列表（用于下拉框）
+     */
+    const loadAppBuildList = async () => {
+      try {
+        const response = await verBuildApi.search('')
+        appBuildList.value = response.data || []
+      } catch (error) {
+        console.error('加载应用构建列表失败:', error)
+      }
+    }
+
+    /**
+     * 根据appCode获取appName
+     */
+    const getAppName = (appCode) => {
+      if (!appCode) return '-'
+      const app = appBuildList.value.find(item => item.appCode === appCode)
+      return app ? app.appName : appCode
+    }
+
+    onMounted(() => {
+      searchApps()
+      loadAppBuildList()
+    })
 
     return {
-      searchText, appList, loading, currentApp, startForm,
+      searchText, appList, appBuildList, loading, currentApp, startForm,
       startDialogVisible, stopDialogVisible, sortedAppList,
       editDialogVisible, isEdit, editForm, selectedRow, handleCurrentChange,
       searchApps, startApp, confirmStart, stopApp, confirmStop,
-      viewLogs, getStatusText, formatDateTime, addApp, editApp, saveApp, deleteApp, logModal
+      viewLogs, getStatusText, formatDateTime, addApp, editApp, saveApp, deleteApp, logModal,
+      getAppName
     }
   }
 }

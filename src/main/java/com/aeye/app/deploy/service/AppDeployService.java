@@ -23,10 +23,10 @@ public class AppDeployService {
     }
 
     /**
-     * 根据appCode获取应用
+     * 根据svcCode获取应用
      */
-    public AppDeploy getAppByCode(String appCode) {
-        return appDeployMapper.selectById(appCode);
+    public AppDeploy getAppByCode(String svcCode) {
+        return appDeployMapper.selectById(svcCode);
     }
 
     /**
@@ -35,7 +35,7 @@ public class AppDeployService {
     @Transactional(rollbackFor = Exception.class)
     public void saveApp(AppDeploy appInfo) {
         appInfo.setUpdateTime(new Date());
-        AppDeploy existing = appDeployMapper.selectById(appInfo.getAppCode());
+        AppDeploy existing = appDeployMapper.selectById(appInfo.getSvcCode());
         if (existing != null) {
             appDeployMapper.updateById(appInfo);
         } else {
@@ -47,8 +47,8 @@ public class AppDeployService {
      * 删除应用
      */
     @Transactional(rollbackFor = Exception.class)
-    public void deleteApp(String appCode) {
-        appDeployMapper.deleteById(appCode);
+    public void deleteApp(String svcCode) {
+        appDeployMapper.deleteById(svcCode);
     }
 
 }

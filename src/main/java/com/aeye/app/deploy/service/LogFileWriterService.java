@@ -226,6 +226,37 @@ public class LogFileWriterService implements CommandLineRunner {
 
 
     /**
+     * 从appCode中提取安全的目录名和文件名前缀
+     * <p>
+     * 如果appCode是完整路径（如/aeye/logs/xxx.log），则提取文件名部分并去掉扩展名
+     * 
+     * @param appCode 应用编码或完整路径
+     * @return 安全的名称（不含路径分隔符和扩展名）
+     */
+    private String extractSafeAppName(String appCode) {
+        if (appCode == null || appCode.isEmpty()) {
+            return "unknown";
+        }
+        
+        // 提取文件名部分（处理路径分隔符）
+        String name = appCode;
+        int lastSlash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
+        if (lastSlash >= 0) {
+            name = name.substring(lastSlash + 1);
+        }
+        
+        // 去掉.log扩展名
+        if (name.toLowerCase().endsWith(".log")) {
+            name = name.substring(0, name.length() - 4);
+        }
+        
+        // 清理特殊字符
+        name = name.replaceAll("[/\\\\:*?\"<>|]", "_");
+        
+        return name.isEmpty() ? "unknown" : name;
+    }
+
+    /**
      * 写入日志到文件
      */
     private void writeLogsToFile(String appCode, List<AppLog> logs,
@@ -235,8 +266,11 @@ public class LogFileWriterService implements CommandLineRunner {
         }
         
         try {
+            // 提取安全的应用名称（处理appCode可能是完整路径的情况）
+            String safeAppName = extractSafeAppName(appCode);
+            
             // 确保目录存在
-            Path logDir = Paths.get(logsDir, appCode);
+            Path logDir = Paths.get(logsDir, safeAppName);
             if (!Files.exists(logDir)) {
                 Files.createDirectories(logDir);
             }
@@ -258,7 +292,7 @@ public class LogFileWriterService implements CommandLineRunner {
                 if (!safeVersion.equals(buffer.currentVersion)) {
                     buffer.currentVersion = safeVersion;
                     // 查找该版本的下一个运行次数
-                    int[] counts = findNextRunAndFileSeq(logDir, appCode, safeVersion);
+                    int[] counts = findNextRunAndFileSeq(logDir, safeAppName, safeVersion);
                     buffer.runCount = counts[0];
                     buffer.fileSeq = counts[1];
                 } else if (buffer.currentFileSize >= getMaxFileSize()) {
@@ -266,9 +300,9 @@ public class LogFileWriterService implements CommandLineRunner {
                     buffer.fileSeq++;
                 }
                 
-                // 创建新文件: appCode_version_x-y.log
+                // 创建新文件: safeAppName_version_x-y.log
                 String fileName = String.format("%s_%s_%d-%d.log", 
-                        appCode, safeVersion, buffer.runCount, buffer.fileSeq);
+                        safeAppName, safeVersion, buffer.runCount, buffer.fileSeq);
                 buffer.currentFile = logDir.resolve(fileName).toFile();
                 buffer.currentFileSize = buffer.currentFile.exists() ? buffer.currentFile.length() : 0;
             }
@@ -288,7 +322,7 @@ public class LogFileWriterService implements CommandLineRunner {
                         writer.flush();
                         buffer.fileSeq++;
                         String fileName = String.format("%s_%s_%d-%d.log", 
-                                appCode, buffer.currentVersion, buffer.runCount, buffer.fileSeq);
+                                safeAppName, buffer.currentVersion, buffer.runCount, buffer.fileSeq);
                         buffer.currentFile = logDir.resolve(fileName).toFile();
                         buffer.currentFileSize = 0;
                         break;
@@ -434,11 +468,14 @@ public class LogFileWriterService implements CommandLineRunner {
             // 先刷新现有日志
             flushBufferInternal(appCode, buffer);
             
+            // 提取安全的应用名称（处理appCode可能是完整路径的情况）
+            String safeAppName = extractSafeAppName(appCode);
+            
             // 清理版本号
             String safeVersion = version != null ? version.replaceAll("[/\\\\:*?\"<>|]", "_") : "unknown";
             
             // 确保目录存在
-            Path logDir = Paths.get(logsDir, appCode);
+            Path logDir = Paths.get(logsDir, safeAppName);
             try {
                 if (!Files.exists(logDir)) {
                     Files.createDirectories(logDir);
@@ -448,7 +485,7 @@ public class LogFileWriterService implements CommandLineRunner {
             }
             
             // 查找当前最大运行次数并递增
-            int maxRunCount = findMaxRunCount(logDir, appCode, safeVersion);
+            int maxRunCount = findMaxRunCount(logDir, safeAppName, safeVersion);
             buffer.runCount = maxRunCount + 1;
             buffer.fileSeq = 1;
             buffer.currentVersion = safeVersion;

@@ -86,12 +86,14 @@ public class AppDeployController {
                 Map<String, Object> appMap = new HashMap<>();
                 
                 // 设置应用基本信息
+                appMap.put("svcCode", appInfo.getSvcCode());
                 appMap.put("appCode", appInfo.getAppCode());
                 appMap.put("version", appInfo.getVersion());
                 appMap.put("params", appInfo.getParams());
+
                 
-                // 从批量获取的结果中获取进程ID
-                String pid = processStatusMap.get(appInfo.getAppCode());
+                // 从批量获取的结果中获取进程ID（使用svcCode作为key）
+                String pid = processStatusMap.get(appInfo.getSvcCode());
                 
                 if (pid != null) {
                     // 进程正在运行，状态设置为2（运行）
@@ -133,41 +135,41 @@ public class AppDeployController {
      * <p>
      * 异步启动指定版本的JAR应用，支持自定义JVM参数
      *
-     * @param request 请求参数：appCode-应用编码，version-版本号，params-JVM参数
+     * @param request 请求参数：svcCode-微服务编码，version-版本号，params-JVM参数
      * @return 启动结果
      */
     @PostMapping("/start")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> startApp(@RequestBody Map<String, String> request) {
         try {
-            String appCode = request.get("appCode");
+            String svcCode = request.get("svcCode");
             String version = request.get("version");
             String params = request.get("params");
 
-            if (appCode == null || appCode.trim().isEmpty()) {
+            if (svcCode == null || svcCode.trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "应用编码不能为空");
+                response.put("message", "微服务编码不能为空");
                 return ResponseEntity.ok(response);
             }
             
-            // 验证appCode格式，防止路径遍历攻击
-            if (!isValidAppCode(appCode)) {
+            // 验证svcCode格式，防止路径遍历攻击
+            if (!isValidAppCode(svcCode)) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "应用编码格式不正确");
+                response.put("message", "微服务编码格式不正确");
                 return ResponseEntity.ok(response);
             }
 
-            AppDeploy appInfo = appDeployService.getAppByCode(appCode);
+            AppDeploy appInfo = appDeployService.getAppByCode(svcCode);
             if (appInfo == null) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "应用编码不存在");
+                response.put("message", "微服务编码不存在");
                 return ResponseEntity.ok(response);
             }
 
-            jarProcessService.startJarApp(appCode, version, params);
+            jarProcessService.startJarApp(appInfo, version, params);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -175,7 +177,7 @@ public class AppDeployController {
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
-            logger.error("启动应用失败: {}", request.get("appCode"), e);
+            logger.error("启动应用失败: {}", request.get("svcCode"), e);
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
             response.put("message", "启动应用失败，请稍后重试");
@@ -202,10 +204,10 @@ public class AppDeployController {
     @ResponseBody
     public ResponseEntity<Map<String, Object>> saveApp(@RequestBody AppDeploy appInfo) {
         try {
-            if (appInfo.getAppCode() == null || appInfo.getAppCode().trim().isEmpty()) {
+            if (appInfo.getSvcCode() == null || appInfo.getSvcCode().trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "应用编码不能为空");
+                response.put("message", "微服务编码不能为空");
                 return ResponseEntity.ok(response);
             }
 
@@ -227,22 +229,22 @@ public class AppDeployController {
     /**
      * 删除应用配置
      *
-     * @param request 请求参数：appCode-应用编码
+     * @param request 请求参数：svcCode-微服务编码
      * @return 删除结果
      */
     @PostMapping("/delete")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> deleteApp(@RequestBody Map<String, String> request) {
         try {
-            String appCode = request.get("appCode");
-            if (appCode == null || appCode.trim().isEmpty()) {
+            String svcCode = request.get("svcCode");
+            if (svcCode == null || svcCode.trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "应用编码不能为空");
+                response.put("message", "微服务编码不能为空");
                 return ResponseEntity.ok(response);
             }
 
-            appDeployService.deleteApp(appCode);
+            appDeployService.deleteApp(svcCode);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -262,20 +264,20 @@ public class AppDeployController {
      * <p>
      * 通过进程ID强制终止应用进程
      *
-     * @param request 请求参数：appCode-应用编码，pid-进程ID
+     * @param request 请求参数：svcCode-微服务编码，pid-进程ID
      * @return 停止结果
      */
     @PostMapping("/stop")
     @ResponseBody
     public ResponseEntity<Map<String, Object>> stopApp(@RequestBody Map<String, String> request) {
         try {
-            String appCode = request.get("appCode");
+            String svcCode = request.get("svcCode");
             String pid = request.get("pid");
 
-            if (appCode == null || appCode.trim().isEmpty()) {
+            if (svcCode == null || svcCode.trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "应用编码不能为空");
+                response.put("message", "微服务编码不能为空");
                 return ResponseEntity.ok(response);
             }
 
@@ -290,7 +292,7 @@ public class AppDeployController {
             boolean success = ProcessUtil.killProcess(pid);
             
             // 清除缓存，让下次查询时重新获取进程状态
-            processCache.remove(appCode);
+            processCache.remove(svcCode);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", success);
@@ -317,17 +319,17 @@ public class AppDeployController {
         long currentTime = System.currentTimeMillis();
         
         for (AppDeploy app : apps) {
-            String appCode = app.getAppCode();
-            CachedProcessInfo cached = processCache.get(appCode);
+            String svcCode = app.getSvcCode();
+            CachedProcessInfo cached = processCache.get(svcCode);
             
             // 如果缓存存在且未过期，直接使用缓存
             if (cached != null && !cached.isExpired()) {
                 if (cached.pid != null) {
-                    result.put(appCode, cached.pid);
+                    result.put(svcCode, cached.pid);
                 }
             } else {
                 // 需要检查的应用
-                appsToCheck.add(appCode);
+                appsToCheck.add(svcCode);
             }
         }
         
@@ -337,15 +339,15 @@ public class AppDeployController {
             Map<String, String> allProcesses = ProcessUtil.getAllJarProcessIds();
             
             // 更新缓存和结果
-            for (String appCode : appsToCheck) {
-                String pid = allProcesses.get(appCode);
+            for (String svcCode : appsToCheck) {
+                String pid = allProcesses.get(svcCode);
                 
                 if (pid != null) {
-                    result.put(appCode, pid);
-                    processCache.put(appCode, new CachedProcessInfo(pid, currentTime));
+                    result.put(svcCode, pid);
+                    processCache.put(svcCode, new CachedProcessInfo(pid, currentTime));
                 } else {
                     // 进程不存在，更新缓存为null（而不是移除，这样可以避免频繁查询）
-                    processCache.put(appCode, new CachedProcessInfo(null, currentTime));
+                    processCache.put(svcCode, new CachedProcessInfo(null, currentTime));
                 }
             }
         }

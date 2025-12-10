@@ -64,34 +64,55 @@ public class JarProcessService {
      * <p>
      * 执行流程：
      * <ol>
-     *   <li>复制指定版本JAR到运行位置（appCode.jar）</li>
+     *   <li>优先读取app_code目录下的jar，找不到再读取archive目录下的jar</li>
+     *   <li>复制指定版本JAR到运行位置（svcCode.jar）</li>
      *   <li>构建启动命令（Java + JVM参数 + JAR）</li>
      *   <li>异步启动进程并采集日志</li>
      * </ol>
      *
-     * @param appCode 应用编码
-     * @param version 版本号
-     * @param params  JVM启动参数（多行，每行一个参数）
+     * @param appDeploy 应用部署信息
+     * @param version   版本号
+     * @param params    JVM启动参数（多行，每行一个参数）
      * @throws Exception 如果JAR文件不存在或启动失败
      */
-    public void startJarApp(String appCode, String version, String params) throws Exception {
-        // 构建JAR文件路径（新目录结构：archiveDir/appCode/xxx.jar）
-        String appArchiveDir = jarDir + File.separator + appCode;
-        String targetJarPath = appArchiveDir + File.separator + appCode + ".jar";
-        String sourceJarPath = appArchiveDir + File.separator + appCode + "-" + version + ".jar";
-        File file = new File(sourceJarPath);
-
-        // 兼容旧目录结构（archiveDir/xxx.jar）
-        if (!file.exists()) {
-            String oldJarFilePath = jarDir + File.separator + appCode + "-" + version + ".jar";
-            file = new File(oldJarFilePath);
+    public void startJarApp(AppDeploy appDeploy, String version, String params) throws Exception {
+        String svcCode = appDeploy.getSvcCode();
+        String appCode = appDeploy.getAppCode();
+        
+        String sourceJarPath = null;
+        String targetJarPath = null;
+        File file = null;
+        
+        // 优先读取app_code目录下的jar（如果appCode不为空）
+        if (appCode != null && !appCode.trim().isEmpty()) {
+            String appCodeDir = jarDir + File.separator + appCode;
+            sourceJarPath = appCodeDir + File.separator + svcCode + "-" + version + ".jar";
+            file = new File(sourceJarPath);
             if (file.exists()) {
-                sourceJarPath = oldJarFilePath;
-                targetJarPath = jarDir + File.separator + appCode + ".jar";
+                targetJarPath = appCodeDir + File.separator + svcCode + ".jar";
+            }
+        }
+        
+        // 如果app_code目录下找不到，尝试svcCode目录
+        if (file == null || !file.exists()) {
+            String svcCodeDir = jarDir + File.separator + svcCode;
+            sourceJarPath = svcCodeDir + File.separator + svcCode + "-" + version + ".jar";
+            file = new File(sourceJarPath);
+            if (file.exists()) {
+                targetJarPath = svcCodeDir + File.separator + svcCode + ".jar";
+            }
+        }
+        
+        // 兼容旧目录结构（archiveDir/xxx.jar）
+        if (file == null || !file.exists()) {
+            sourceJarPath = jarDir + File.separator + svcCode + "-" + version + ".jar";
+            file = new File(sourceJarPath);
+            if (file.exists()) {
+                targetJarPath = jarDir + File.separator + svcCode + ".jar";
             }
         }
 
-        if (!file.exists()) {
+        if (file == null || !file.exists()) {
             throw new RuntimeException("JAR文件不存在【" + sourceJarPath + "】");
         }
 
@@ -110,13 +131,14 @@ public class JarProcessService {
         // 用于lambda表达式的final变量
         final String finalJarFilePath = targetJarPath;
         final String finalWorkDir = new File(targetJarPath).getParent();
+        final String finalSvcCode = svcCode;
 
-        // 开始新的运行会话（递增运行次数）
-        logBufferService.startNewSession(appCode, version);
+        // 开始新的运行会话（递增运行次数），使用svcCode作为日志标识（与构建日志保持一致）
+        logBufferService.startNewSession(finalSvcCode, version);
 
         executorService.submit(() -> {
             try {
-                logger.info("开始启动应用: {}, 版本: {}", appCode, version);
+                logger.info("开始启动应用: {}, 版本: {}", finalSvcCode, version);
 
                 // 构建启动命令
                 ProcessBuilder processBuilder = new ProcessBuilder();
@@ -158,23 +180,18 @@ public class JarProcessService {
                 Process process = processBuilder.start();
 
                 // 更新应用信息
-                AppDeploy appInfo = appDeployService.getAppByCode(appCode);
-                if (appInfo != null) {
-                    appInfo.setParams(params);
-                    appInfo.setVersion(version);
-                    appDeployService.saveApp(appInfo);
-                } else {
-                    logger.warn("应用信息不存在，无法更新: {}", appCode);
-                }
+                appDeploy.setParams(params);
+                appDeploy.setVersion(version);
+                appDeployService.saveApp(appDeploy);
                 
-                logger.info("应用启动命令已执行: {}", appCode);
+                logger.info("应用启动命令已执行: {}", finalSvcCode);
                 
-                // 异步读取进程输出并写入内存缓冲
-                readProcessOutput(process, appCode, version);
+                // 异步读取进程输出并写入内存缓冲，使用svcCode作为日志标识（与构建日志保持一致）
+                readProcessOutput(process, finalSvcCode, version);
 
             } catch (Exception e) {
-                logger.error("启动应用失败: {}, 版本: {}", appCode, version, e);
-                logBufferService.addLog(appCode, version, "ERROR", "启动应用失败: " + e.getMessage(), new Date());
+                logger.error("启动应用失败: {}, 版本: {}", finalSvcCode, version, e);
+                logBufferService.addLog(finalSvcCode, version, "ERROR", "启动应用失败: " + e.getMessage(), new Date());
             }
         });
 
