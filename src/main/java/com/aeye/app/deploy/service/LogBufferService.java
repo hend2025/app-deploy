@@ -56,11 +56,6 @@ public class LogBufferService implements CommandLineRunner {
     }
 
     public void addLog(String appCode, String version, String logLevel, String logContent, Date logTime) {
-        addLog(appCode, version, logLevel, logContent, logTime, LogFileWriterService.LOG_TYPE_BUILD);
-    }
-
-    public void addLog(String appCode, String version, String logLevel, String logContent,
-                       Date logTime, String logType) {
         AppLogBuffer buffer = getOrCreateBuffer(appCode);
         AppLog log = createAppLog(appCode, version, logLevel, logContent, logTime);
         
@@ -78,7 +73,7 @@ public class LogBufferService implements CommandLineRunner {
         }
 
         // 异步写入日志文件
-        logFileWriterService.addLog(appCode, logType, version, logLevel, logContent, logTime);
+        logFileWriterService.addLog(appCode, version, logLevel, logContent, logTime);
 
         // WebSocket推送日志
         logWebSocketHandler.pushLog(log);
@@ -134,14 +129,13 @@ public class LogBufferService implements CommandLineRunner {
      * 清除内存缓冲区并通知文件写入服务开始新会话，递增运行/打包次数
      *
      * @param appCode 应用编码
-     * @param logType 日志类型（build/console）
      * @param version 版本号
      */
-    public void startNewSession(String appCode, String logType, String version) {
+    public void startNewSession(String appCode, String version) {
         // 清除内存缓冲区
         clearBuffer(appCode);
         // 通知文件写入服务开始新会话
-        logFileWriterService.startNewSession(appCode, logType, version);
+        logFileWriterService.startNewSession(appCode, version);
     }
 
 }

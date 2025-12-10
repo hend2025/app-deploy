@@ -24,11 +24,6 @@ public class LogFileWriterService implements CommandLineRunner {
 
     private static final Logger logger = LoggerFactory.getLogger(LogFileWriterService.class);
 
-    /** 日志类型：构建日志 */
-    public static final String LOG_TYPE_BUILD = "build";
-    /** 日志类型：控制台日志 */
-    public static final String LOG_TYPE_CONSOLE = "console";
-
     @Value("${app.directory.logs:/home/logs}")
     private String logsDir;
 
@@ -66,7 +61,7 @@ public class LogFileWriterService implements CommandLineRunner {
         volatile int fileSeq = 1;
     }
 
-    /** 缓冲区映射：key = appCode + "_" + logType */
+    /** 缓冲区映射：key = appCode */
     private final ConcurrentHashMap<String, LogFileBuffer> buffers = new ConcurrentHashMap<>();
 
     /** 定时刷新调度器 */
@@ -80,17 +75,10 @@ public class LogFileWriterService implements CommandLineRunner {
             ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS"));
 
     /**
-     * 获取缓冲区key
-     */
-    private String getBufferKey(String appCode, String logType) {
-        return appCode + "_" + logType;
-    }
-
-    /**
      * 获取或创建缓冲区
      */
-    private LogFileBuffer getOrCreateBuffer(String appCode, String logType) {
-        return buffers.computeIfAbsent(getBufferKey(appCode, logType), k -> new LogFileBuffer());
+    private LogFileBuffer getOrCreateBuffer(String appCode) {
+        return buffers.computeIfAbsent(appCode, k -> new LogFileBuffer());
     }
 
     /**
@@ -150,18 +138,17 @@ public class LogFileWriterService implements CommandLineRunner {
     /**
      * 添加日志到缓冲区
      * <p>
-     * 日志会被添加到对应应用和类型的缓冲区，当待写入日志数达到阈值时，自动触发文件写入。
+     * 日志会被添加到对应应用的缓冲区，当待写入日志数达到阈值时，自动触发文件写入。
      *
      * @param appCode    应用编码
-     * @param logType    日志类型（build/consolelogs）
      * @param version    版本号
      * @param logLevel   日志级别
      * @param logContent 日志内容
      * @param logTime    日志时间
      */
-    public void addLog(String appCode, String logType, String version, String logLevel, 
+    public void addLog(String appCode, String version, String logLevel, 
                        String logContent, Date logTime) {
-        LogFileBuffer buffer = getOrCreateBuffer(appCode, logType);
+        LogFileBuffer buffer = getOrCreateBuffer(appCode);
         
         AppLog log = new AppLog();
         log.setAppCode(appCode);
@@ -175,31 +162,31 @@ public class LogFileWriterService implements CommandLineRunner {
 
         // 检查是否达到提交阈值
         if (pending >= flushSize) {
-            asyncFlushToFile(appCode, logType);
+            asyncFlushToFile(appCode);
         }
     }
 
     /**
      * 异步刷新到文件
      */
-    private void asyncFlushToFile(String appCode, String logType) {
+    private void asyncFlushToFile(String appCode) {
         if (writerExecutor == null || writerExecutor.isShutdown()) {
             return;
         }
         writerExecutor.submit(() -> {
             try {
-                flushToFile(appCode, logType);
+                flushToFile(appCode);
             } catch (Exception e) {
-                logger.error("异步写入日志文件失败: appCode={}, logType={}", appCode, logType, e);
+                logger.error("异步写入日志文件失败: appCode={}", appCode, e);
             }
         });
     }
 
     /**
-     * 刷新指定应用和类型的缓冲区到文件
+     * 刷新指定应用的缓冲区到文件
      */
-    public void flushToFile(String appCode, String logType) {
-        LogFileBuffer buffer = buffers.get(getBufferKey(appCode, logType));
+    public void flushToFile(String appCode) {
+        LogFileBuffer buffer = buffers.get(appCode);
         if (buffer == null) {
             return;
         }
@@ -229,9 +216,9 @@ public class LogFileWriterService implements CommandLineRunner {
             }
 
             // 写入文件
-            writeLogsToFile(appCode, logType, logsToWrite, buffer);
+            writeLogsToFile(appCode, logsToWrite, buffer);
             
-            logger.debug("应用[{}]类型[{}]日志写入完成，已写入 {} 条", appCode, logType, logsToWrite.size());
+            logger.debug("应用[{}]日志写入完成，已写入 {} 条", appCode, logsToWrite.size());
 
         } finally {
             buffer.writeLock.unlock();
@@ -242,7 +229,7 @@ public class LogFileWriterService implements CommandLineRunner {
     /**
      * 写入日志到文件
      */
-    private void writeLogsToFile(String appCode, String logType, List<AppLog> logs, 
+    private void writeLogsToFile(String appCode, List<AppLog> logs, 
                                   LogFileBuffer buffer) {
         if (logs.isEmpty()) {
             return;
@@ -250,7 +237,7 @@ public class LogFileWriterService implements CommandLineRunner {
         
         try {
             // 确保目录存在
-            Path logDir = Paths.get(logsDir, appCode, logType);
+            Path logDir = Paths.get(logsDir, appCode);
             if (!Files.exists(logDir)) {
                 Files.createDirectories(logDir);
             }
@@ -311,7 +298,7 @@ public class LogFileWriterService implements CommandLineRunner {
             }
 
         } catch (IOException e) {
-            logger.error("写入日志文件失败: appCode={}, logType={}", appCode, logType, e);
+            logger.error("写入日志文件失败: appCode={}", appCode, e);
         }
     }
 
@@ -428,11 +415,8 @@ public class LogFileWriterService implements CommandLineRunner {
      * 刷新所有缓冲区到文件
      */
     public void flushAllToFile() {
-        for (String key : buffers.keySet()) {
-            String[] parts = key.split("_", 2);
-            if (parts.length == 2) {
-                flushToFile(parts[0], parts[1]);
-            }
+        for (String appCode : buffers.keySet()) {
+            flushToFile(appCode);
         }
     }
 
@@ -442,21 +426,20 @@ public class LogFileWriterService implements CommandLineRunner {
      * 调用此方法后，下次写入日志时会递增运行次数（x），文件序号（y）重置为1
      *
      * @param appCode 应用编码
-     * @param logType 日志类型
      * @param version 版本号
      */
-    public void startNewSession(String appCode, String logType, String version) {
-        LogFileBuffer buffer = getOrCreateBuffer(appCode, logType);
+    public void startNewSession(String appCode, String version) {
+        LogFileBuffer buffer = getOrCreateBuffer(appCode);
         buffer.writeLock.lock();
         try {
             // 先刷新现有日志
-            flushBufferInternal(appCode, logType, buffer);
+            flushBufferInternal(appCode, buffer);
             
             // 清理版本号
             String safeVersion = version != null ? version.replaceAll("[/\\\\:*?\"<>|]", "_") : "unknown";
             
             // 确保目录存在
-            Path logDir = Paths.get(logsDir, appCode, logType);
+            Path logDir = Paths.get(logsDir, appCode);
             try {
                 if (!Files.exists(logDir)) {
                     Files.createDirectories(logDir);
@@ -482,7 +465,7 @@ public class LogFileWriterService implements CommandLineRunner {
     /**
      * 内部刷新方法（需要在持有锁的情况下调用）
      */
-    private void flushBufferInternal(String appCode, String logType, LogFileBuffer buffer) {
+    private void flushBufferInternal(String appCode, LogFileBuffer buffer) {
         int pending = buffer.pendingCount.get();
         if (pending == 0) {
             return;
@@ -498,7 +481,7 @@ public class LogFileWriterService implements CommandLineRunner {
         buffer.pendingCount.addAndGet(-logsToWrite.size());
 
         if (!logsToWrite.isEmpty()) {
-            writeLogsToFile(appCode, logType, logsToWrite, buffer);
+            writeLogsToFile(appCode, logsToWrite, buffer);
         }
     }
 

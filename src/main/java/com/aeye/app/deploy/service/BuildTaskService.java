@@ -119,7 +119,7 @@ public class BuildTaskService {
         verMgtService.updateStatus(appCode, "1", null);
         
         // 开始新的构建会话（清除缓存并递增打包次数）
-        logBufferService.startNewSession(appCode, LogFileWriterService.LOG_TYPE_BUILD, branchOrTag);
+        logBufferService.startNewSession(appCode, branchOrTag);
         
         // 记录构建开始日志
         logBufferService.addLog(appCode, branchOrTag, "INFO", 

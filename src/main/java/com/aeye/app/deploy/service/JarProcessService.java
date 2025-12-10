@@ -22,8 +22,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-import static com.aeye.app.deploy.service.LogFileWriterService.LOG_TYPE_CONSOLE;
-
 @Service
 public class JarProcessService {
     
@@ -87,7 +85,7 @@ public class JarProcessService {
         Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
 
         // 开始新的运行会话（递增运行次数）
-        logBufferService.startNewSession(appCode, LogFileWriterService.LOG_TYPE_CONSOLE, version);
+        logBufferService.startNewSession(appCode, version);
 
         executorService.submit(() -> {
             try {
@@ -149,8 +147,7 @@ public class JarProcessService {
 
             } catch (Exception e) {
                 logger.error("启动应用失败: {}, 版本: {}", appCode, version, e);
-                logBufferService.addLog(appCode, version, "ERROR", "启动应用失败: " + e.getMessage(), new Date(),
-                        LogFileWriterService.LOG_TYPE_CONSOLE);
+                logBufferService.addLog(appCode, version, "ERROR", "启动应用失败: " + e.getMessage(), new Date());
             }
         });
 
@@ -166,8 +163,7 @@ public class JarProcessService {
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    logBufferService.addLog(appCode, version, parseLogLevel(line), line, new Date(), 
-                            LogFileWriterService.LOG_TYPE_CONSOLE);
+                    logBufferService.addLog(appCode, version, parseLogLevel(line), line, new Date());
                 }
             } catch (Exception e) {
                 logger.error("读取进程输出失败: {}", appCode, e);
