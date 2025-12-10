@@ -31,6 +31,10 @@ public class JarProcessService {
     @Value("${app.directory.archive:/home/archive}")
     private String jarDir;
     
+    /** 最大并发启动任务数 */
+    @Value("${app.process.max-concurrent-startups:10}")
+    private int maxConcurrentStartups;
+    
     @Autowired
     private AppMgtService appMgtService;
     
@@ -43,15 +47,18 @@ public class JarProcessService {
     /** 是否为Windows系统 */
     private static final boolean IS_WINDOWS = OS.contains("win");
     
-    /** 最大并发启动任务数 */
-    private static final int MAX_CONCURRENT_STARTUPS = 10;
-    
     /** 启动任务线程池 */
-    private final ExecutorService executorService = Executors.newFixedThreadPool(MAX_CONCURRENT_STARTUPS, r -> {
-        Thread thread = new Thread(r, "jar-startup-thread");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private ExecutorService executorService;
+    
+    @javax.annotation.PostConstruct
+    public void init() {
+        executorService = Executors.newFixedThreadPool(maxConcurrentStartups, r -> {
+            Thread thread = new Thread(r, "jar-startup-thread");
+            thread.setDaemon(true);
+            return thread;
+        });
+        logger.info("JarProcessService初始化完成，最大并发启动数: {}", maxConcurrentStartups);
+    }
 
     /**
      * 启动JAR应用
@@ -69,20 +76,41 @@ public class JarProcessService {
      * @throws Exception 如果JAR文件不存在或启动失败
      */
     public void startJarApp(String appCode, String version, String params) throws Exception {
-        // 构建JAR文件路径
-        String jarFilePath = jarDir + File.separator + appCode + ".jar";
-        String jarFilePath2 = jarDir + File.separator + appCode + "-" + version + ".jar";
-        File file = new File(jarFilePath2);
+        // 构建JAR文件路径（新目录结构：archiveDir/appCode/xxx.jar）
+        String appArchiveDir = jarDir + File.separator + appCode;
+        String targetJarPath = appArchiveDir + File.separator + appCode + ".jar";
+        String sourceJarPath = appArchiveDir + File.separator + appCode + "-" + version + ".jar";
+        File file = new File(sourceJarPath);
 
+        // 兼容旧目录结构（archiveDir/xxx.jar）
         if (!file.exists()) {
-            throw new RuntimeException("JAR文件不存在【" + jarFilePath2+"】");
+            String oldJarFilePath = jarDir + File.separator + appCode + "-" + version + ".jar";
+            file = new File(oldJarFilePath);
+            if (file.exists()) {
+                sourceJarPath = oldJarFilePath;
+                targetJarPath = jarDir + File.separator + appCode + ".jar";
+            }
         }
 
-        Path source = Paths.get(jarFilePath2);
-        Path target = Paths.get(jarFilePath);
+        if (!file.exists()) {
+            throw new RuntimeException("JAR文件不存在【" + sourceJarPath + "】");
+        }
+
+        Path source = Paths.get(sourceJarPath);
+        Path target = Paths.get(targetJarPath);
+
+        // 确保目标目录存在
+        File targetDir = new File(targetJarPath).getParentFile();
+        if (!targetDir.exists()) {
+            targetDir.mkdirs();
+        }
 
         // 如果目标文件已存在，则替换
         Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+        
+        // 用于lambda表达式的final变量
+        final String finalJarFilePath = targetJarPath;
+        final String finalWorkDir = new File(targetJarPath).getParent();
 
         // 开始新的运行会话（递增运行次数）
         logBufferService.startNewSession(appCode, version);
@@ -119,10 +147,10 @@ public class JarProcessService {
                 
                 // 添加jar文件
                 command.add("-jar");
-                command.add(jarFilePath);
+                command.add(finalJarFilePath);
                 
                 processBuilder.command(command);
-                processBuilder.directory(new File(jarDir));
+                processBuilder.directory(new File(finalWorkDir));
                 
                 // 合并标准输出和错误输出
                 processBuilder.redirectErrorStream(true);
@@ -155,6 +183,8 @@ public class JarProcessService {
     
     /**
      * 读取进程输出并写入内存缓冲
+     * <p>
+     * 使用非守护线程确保进程结束后日志能完整读取
      */
     private void readProcessOutput(Process process, String appCode, String version) {
         Thread outputReader = new Thread(() -> {
@@ -166,10 +196,16 @@ public class JarProcessService {
                     logBufferService.addLog(appCode, version, parseLogLevel(line), line, new Date());
                 }
             } catch (Exception e) {
-                logger.error("读取进程输出失败: {}", appCode, e);
+                // 进程被终止时会抛出异常，这是正常的
+                if (process.isAlive()) {
+                    logger.error("读取进程输出失败: {}", appCode, e);
+                }
+            } finally {
+                logger.debug("进程输出读取线程结束: {}", appCode);
             }
         }, "log-reader-" + appCode);
-        outputReader.setDaemon(true);
+        // 使用非守护线程，确保日志能完整读取
+        outputReader.setDaemon(false);
         outputReader.start();
     }
     

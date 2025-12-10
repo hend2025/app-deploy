@@ -11,7 +11,7 @@
         <span class="dialog-title">日志详情 - {{ currentAppCode }}</span>
         <div class="dialog-actions">
           <el-tag :type="wsConnected ? 'success' : 'danger'" size="small" style="margin-right: 8px;">
-            {{ wsConnected ? '已连接' : '未连接' }}
+            {{ wsConnected ? '已连接' : (reconnecting ? '重连中...' : '未连接') }}
           </el-tag>
           <el-button type="info" size="small" @click="scrollToBottom">到底部</el-button>
           <el-button type="warning" size="small" @click="clearLogContent">清空</el-button>
@@ -20,7 +20,7 @@
       </div>
     </template>
     <div ref="logContent" class="log-content" tabindex="0" @keydown.ctrl.a.prevent="selectAllLogs">
-      <div v-for="(log, index) in logs" :key="index" class="log-line" :class="'log-' + (log.logLevel || 'info').toLowerCase()">{{ log.logTime }} {{ log.logContent }}</div>
+      <div v-for="(log, index) in logs" :key="index" class="log-line" :class="'log-' + (log.logLevel || 'info').toLowerCase()">{{ log.logTime }} {{ escapeHtml(log.logContent) }}</div>
       <div v-if="logs.length === 0" class="empty-tip">暂无日志</div>
     </div>
   </el-dialog>
@@ -38,10 +38,14 @@ export default {
     const logs = ref([])
     const logContent = ref(null)
     const wsConnected = ref(false)
+    const reconnecting = ref(false)
     
     let ws = null
-    let lastSeq = 0
     let maxLogSize = 5000 // 默认值，会从后端获取
+    let reconnectTimer = null
+    let reconnectAttempts = 0
+    const MAX_RECONNECT_ATTEMPTS = 5
+    const RECONNECT_INTERVAL = 3000
 
     // 组件挂载时从后端获取配置
     onMounted(async () => {
@@ -55,6 +59,16 @@ export default {
       }
     })
 
+    /**
+     * HTML转义，防止XSS攻击
+     */
+    const escapeHtml = (text) => {
+      if (!text) return ''
+      const div = document.createElement('div')
+      div.textContent = text
+      return div.innerHTML
+    }
+
     const getWsUrl = (appCode) => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
       const host = window.location.host
@@ -62,12 +76,20 @@ export default {
     }
 
     const connectWebSocket = (appCode) => {
-      if (ws) ws.close()
+      if (ws) {
+        ws.close()
+        ws = null
+      }
+      
       const url = getWsUrl(appCode)
       ws = new WebSocket(url)
+      
       ws.onopen = () => {
         wsConnected.value = true
+        reconnecting.value = false
+        reconnectAttempts = 0
       }
+      
       ws.onmessage = (event) => {
         try {
           const log = JSON.parse(event.data)
@@ -81,12 +103,51 @@ export default {
           console.error('解析日志失败:', e)
         }
       }
-      ws.onclose = () => { wsConnected.value = false }
-      ws.onerror = () => { wsConnected.value = false }
+      
+      ws.onclose = (event) => {
+        wsConnected.value = false
+        // 非正常关闭且对话框仍打开时，尝试重连
+        if (visible.value && event.code !== 1000 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+          scheduleReconnect(appCode)
+        }
+      }
+      
+      ws.onerror = () => {
+        wsConnected.value = false
+      }
+    }
+
+    /**
+     * 安排重连
+     */
+    const scheduleReconnect = (appCode) => {
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+      }
+      
+      reconnecting.value = true
+      reconnectAttempts++
+      console.log(`WebSocket断开，${RECONNECT_INTERVAL/1000}秒后尝试第${reconnectAttempts}次重连...`)
+      
+      reconnectTimer = setTimeout(() => {
+        if (visible.value) {
+          connectWebSocket(appCode)
+        }
+      }, RECONNECT_INTERVAL)
     }
 
     const closeWebSocket = () => {
-      if (ws) { ws.close(); ws = null }
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = null
+      }
+      reconnectAttempts = 0
+      reconnecting.value = false
+      
+      if (ws) {
+        ws.close(1000, 'User closed')
+        ws = null
+      }
       wsConnected.value = false
     }
 
@@ -96,7 +157,6 @@ export default {
         const historyLogs = response.logs || []
         if (historyLogs.length > 0) {
           logs.value = historyLogs
-          lastSeq = historyLogs[historyLogs.length - 1].seq || 0
           await nextTick()
           scrollToBottom()
         }
@@ -107,7 +167,6 @@ export default {
 
     const showLog = async (appCode) => {
       closeWebSocket()
-      lastSeq = 0
       currentAppCode.value = appCode
       logs.value = []
       visible.value = true
@@ -121,14 +180,13 @@ export default {
       }
     }
 
-    const clearLogContent = () => { logs.value = []; lastSeq = 0 }
+    const clearLogContent = () => { logs.value = [] }
 
-    const handleClose = () => { closeWebSocket(); logs.value = []; lastSeq = 0 }
+    const handleClose = () => { closeWebSocket(); logs.value = [] }
 
     const closeDialog = () => { 
       closeWebSocket()
       logs.value = []
-      lastSeq = 0
       visible.value = false
     }
 
@@ -145,8 +203,8 @@ export default {
     onUnmounted(() => { closeWebSocket() })
 
     return {
-      visible, currentAppCode, logs, logContent, wsConnected,
-      showLog, scrollToBottom, clearLogContent, handleClose, closeDialog, selectAllLogs
+      visible, currentAppCode, logs, logContent, wsConnected, reconnecting,
+      showLog, scrollToBottom, clearLogContent, handleClose, closeDialog, selectAllLogs, escapeHtml
     }
   }
 }

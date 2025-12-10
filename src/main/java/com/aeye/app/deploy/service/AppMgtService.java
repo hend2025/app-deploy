@@ -3,14 +3,10 @@ package com.aeye.app.deploy.service;
 import com.aeye.app.deploy.mapper.AppInfoMapper;
 import com.aeye.app.deploy.model.AppInfo;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import javax.annotation.PostConstruct;
 import java.util.Date;
 import java.util.List;
 
@@ -45,6 +41,7 @@ public class AppMgtService {
     /**
      * 添加或更新应用
      */
+    @Transactional(rollbackFor = Exception.class)
     public void saveApp(AppInfo appInfo) {
         appInfo.setUpdateTime(new Date());
         AppInfo existing = appInfoMapper.selectById(appInfo.getAppCode());
@@ -58,6 +55,7 @@ public class AppMgtService {
     /**
      * 删除应用
      */
+    @Transactional(rollbackFor = Exception.class)
     public void deleteApp(String appCode) {
         appInfoMapper.deleteById(appCode);
     }

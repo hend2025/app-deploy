@@ -4,6 +4,8 @@ import com.aeye.app.deploy.model.AppInfo;
 import com.aeye.app.deploy.service.AppMgtService;
 import com.aeye.app.deploy.service.JarProcessService;
 import com.aeye.app.deploy.util.ProcessUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @RestController
 @RequestMapping("/appMgt")
 public class AppMgtController {
+
+    private static final Logger logger = LoggerFactory.getLogger(AppMgtController.class);
 
     @Autowired
     private AppMgtService appMgtService;
@@ -116,9 +120,10 @@ public class AppMgtController {
             response.put("total", resultList.size());
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            logger.error("获取应用列表失败", e);
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "获取应用列表失败: " + e.getMessage());
+            response.put("message", "获取应用列表失败，请稍后重试");
             return ResponseEntity.internalServerError().body(response);
         }
     }
@@ -145,6 +150,14 @@ public class AppMgtController {
                 response.put("message", "应用编码不能为空");
                 return ResponseEntity.ok(response);
             }
+            
+            // 验证appCode格式，防止路径遍历攻击
+            if (!isValidAppCode(appCode)) {
+                Map<String, Object> response = new HashMap<>();
+                response.put("success", false);
+                response.put("message", "应用编码格式不正确");
+                return ResponseEntity.ok(response);
+            }
 
             AppInfo appInfo = appMgtService.getAppByCode(appCode);
             if (appInfo == null) {
@@ -154,7 +167,7 @@ public class AppMgtController {
                 return ResponseEntity.ok(response);
             }
 
-            jarProcessService.startJarApp(appCode,version,params);
+            jarProcessService.startJarApp(appCode, version, params);
 
             Map<String, Object> response = new HashMap<>();
             response.put("success", true);
@@ -162,11 +175,19 @@ public class AppMgtController {
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
+            logger.error("启动应用失败: {}", request.get("appCode"), e);
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", e.getMessage());
+            response.put("message", "启动应用失败，请稍后重试");
             return ResponseEntity.internalServerError().body(response);
         }
+    }
+    
+    /**
+     * 验证appCode格式（只允许字母、数字、下划线、横线）
+     */
+    private boolean isValidAppCode(String appCode) {
+        return appCode != null && appCode.matches("^[a-zA-Z0-9_\\-]+$");
     }
 
     /**
@@ -195,9 +216,10 @@ public class AppMgtController {
             response.put("message", "保存成功");
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            logger.error("保存应用配置失败", e);
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "保存失败: " + e.getMessage());
+            response.put("message", "保存失败，请稍后重试");
             return ResponseEntity.internalServerError().body(response);
         }
     }
@@ -227,9 +249,10 @@ public class AppMgtController {
             response.put("message", "删除成功");
             return ResponseEntity.ok(response);
         } catch (Exception e) {
+            logger.error("删除应用配置失败", e);
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "删除失败: " + e.getMessage());
+            response.put("message", "删除失败，请稍后重试");
             return ResponseEntity.internalServerError().body(response);
         }
     }
@@ -275,9 +298,10 @@ public class AppMgtController {
             return ResponseEntity.ok(response);
 
         } catch (Exception e) {
+            logger.error("停止应用失败", e);
             Map<String, Object> response = new HashMap<>();
             response.put("success", false);
-            response.put("message", "停止应用失败: " + e.getMessage());
+            response.put("message", "停止应用失败，请稍后重试");
             return ResponseEntity.internalServerError().body(response);
         }
     }

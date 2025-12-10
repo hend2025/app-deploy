@@ -98,10 +98,28 @@ public class LogBufferService implements CommandLineRunner {
             return result;
         }
         
-        for (AppLog log : buffer.logs) {
-            if (log.getSeq() != null && log.getSeq() > afterSeq) {
-                result.add(log);
-                if (limit > 0 && result.size() >= limit) {
+        // 优化：从尾部向前查找起始位置，减少遍历次数
+        // 因为日志是按seq递增的，可以利用这个特性
+        Iterator<AppLog> iterator = buffer.logs.iterator();
+        
+        // 如果afterSeq为0，直接从头开始
+        if (afterSeq == 0) {
+            while (iterator.hasNext() && (limit <= 0 || result.size() < limit)) {
+                result.add(iterator.next());
+            }
+        } else {
+            // 跳过seq <= afterSeq的日志
+            while (iterator.hasNext()) {
+                AppLog log = iterator.next();
+                if (log.getSeq() != null && log.getSeq() > afterSeq) {
+                    result.add(log);
+                    if (limit > 0 && result.size() >= limit) {
+                        break;
+                    }
+                    // 找到第一个符合条件的后，后续都符合条件
+                    while (iterator.hasNext() && (limit <= 0 || result.size() < limit)) {
+                        result.add(iterator.next());
+                    }
                     break;
                 }
             }

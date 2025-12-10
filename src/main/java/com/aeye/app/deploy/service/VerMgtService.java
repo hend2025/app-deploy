@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.PostConstruct;
 import java.util.Date;
@@ -92,6 +93,7 @@ public class VerMgtService {
     /**
      * 保存版本信息
      */
+    @Transactional(rollbackFor = Exception.class)
     public void saveVersion(VerInfo verInfo) {
         verInfo.setUpdateTime(new Date());
         VerInfo existing = verInfoMapper.selectById(verInfo.getAppCode());
@@ -105,6 +107,7 @@ public class VerMgtService {
     /**
      * 删除版本信息
      */
+    @Transactional(rollbackFor = Exception.class)
     public void deleteVersion(String appCode) {
         verInfoMapper.deleteById(appCode);
     }

@@ -2,16 +2,20 @@ package com.aeye.app.deploy.service;
 
 import com.aeye.app.deploy.model.AppLog;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import java.io.IOException;
 import java.net.URI;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.*;
 
 /**
  * 日志WebSocket处理器
@@ -21,17 +25,145 @@ import java.util.concurrent.ConcurrentHashMap;
 public class LogWebSocketHandler extends TextWebSocketHandler {
 
     private static final Logger logger = LoggerFactory.getLogger(LogWebSocketHandler.class);
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    
+    /** JSON序列化器（线程安全，复用实例） */
+    private final ObjectMapper objectMapper;
+    
+    /** 最大WebSocket连接数 */
+    @Value("${app.websocket.max-connections:100}")
+    private int maxConnections;
 
     /** 按appCode分组的会话集合 */
     private final ConcurrentHashMap<String, Set<WebSocketSession>> appSessions = new ConcurrentHashMap<>();
+    
+    /** 异步消息发送队列 */
+    private final BlockingQueue<LogMessage> messageQueue = new LinkedBlockingQueue<>(10000);
+    
+    /** 消息发送线程池 */
+    private ExecutorService senderExecutor;
+    
+    /** 当前连接总数 */
+    private final java.util.concurrent.atomic.AtomicInteger connectionCount = new java.util.concurrent.atomic.AtomicInteger(0);
+    
+    /** 内部消息封装类 */
+    private static class LogMessage {
+        final String appCode;
+        final String message;
+        
+        LogMessage(String appCode, String message) {
+            this.appCode = appCode;
+            this.message = message;
+        }
+    }
+    
+    public LogWebSocketHandler() {
+        this.objectMapper = new ObjectMapper();
+        this.objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
+        this.objectMapper.setDateFormat(new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS"));
+    }
+    
+    @PostConstruct
+    public void init() {
+        // 启动消息发送线程
+        senderExecutor = Executors.newFixedThreadPool(2, r -> {
+            Thread t = new Thread(r, "ws-sender");
+            t.setDaemon(true);
+            return t;
+        });
+        
+        for (int i = 0; i < 2; i++) {
+            senderExecutor.submit(this::processSendQueue);
+        }
+        logger.info("WebSocket消息发送线程已启动，最大连接数: {}", maxConnections);
+    }
+    
+    @PreDestroy
+    public void shutdown() {
+        if (senderExecutor != null) {
+            senderExecutor.shutdown();
+            try {
+                if (!senderExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                    senderExecutor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                senderExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+    
+    /**
+     * 处理发送队列
+     */
+    private void processSendQueue() {
+        while (!Thread.currentThread().isInterrupted()) {
+            try {
+                LogMessage logMessage = messageQueue.poll(1, TimeUnit.SECONDS);
+                if (logMessage != null) {
+                    doSendMessage(logMessage.appCode, logMessage.message);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception e) {
+                logger.error("处理WebSocket消息队列异常", e);
+            }
+        }
+    }
+    
+    /**
+     * 实际发送消息
+     */
+    private void doSendMessage(String appCode, String message) {
+        Set<WebSocketSession> sessions = appSessions.get(appCode);
+        if (sessions == null || sessions.isEmpty()) {
+            return;
+        }
+        
+        TextMessage textMessage = new TextMessage(message);
+        List<WebSocketSession> deadSessions = new ArrayList<>();
+        
+        for (WebSocketSession session : sessions) {
+            if (session.isOpen()) {
+                try {
+                    synchronized (session) {
+                        session.sendMessage(textMessage);
+                    }
+                } catch (IOException e) {
+                    logger.warn("推送日志失败，移除会话: sessionId={}", session.getId());
+                    deadSessions.add(session);
+                }
+            } else {
+                deadSessions.add(session);
+            }
+        }
+        
+        // 清理已关闭的会话
+        for (WebSocketSession deadSession : deadSessions) {
+            sessions.remove(deadSession);
+            connectionCount.decrementAndGet();
+        }
+    }
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
+        // 检查连接数限制
+        if (connectionCount.get() >= maxConnections) {
+            logger.warn("WebSocket连接数已达上限，拒绝新连接: {}", session.getId());
+            try {
+                session.close(CloseStatus.SERVICE_OVERLOAD);
+            } catch (IOException e) {
+                // ignore
+            }
+            return;
+        }
+        
         String appCode = getAppCodeFromSession(session);
         if (appCode != null) {
             appSessions.computeIfAbsent(appCode, k -> ConcurrentHashMap.newKeySet()).add(session);
-            logger.info("WebSocket连接建立: appCode={}, sessionId={}", appCode, session.getId());
+            connectionCount.incrementAndGet();
+            logger.info("WebSocket连接建立: appCode={}, sessionId={}, 当前连接数: {}", 
+                appCode, session.getId(), connectionCount.get());
         }
     }
 
@@ -46,12 +178,14 @@ public class LogWebSocketHandler extends TextWebSocketHandler {
                     appSessions.remove(appCode);
                 }
             }
-            logger.info("WebSocket连接关闭: appCode={}, sessionId={}", appCode, session.getId());
+            connectionCount.decrementAndGet();
+            logger.info("WebSocket连接关闭: appCode={}, sessionId={}, 当前连接数: {}", 
+                appCode, session.getId(), connectionCount.get());
         }
     }
 
     /**
-     * 推送日志给订阅该appCode的所有客户端
+     * 推送日志给订阅该appCode的所有客户端（异步）
      */
     public void pushLog(AppLog log) {
         String appCode = log.getAppCode();
@@ -62,18 +196,9 @@ public class LogWebSocketHandler extends TextWebSocketHandler {
 
         try {
             String message = objectMapper.writeValueAsString(log);
-            TextMessage textMessage = new TextMessage(message);
-            
-            for (WebSocketSession session : sessions) {
-                if (session.isOpen()) {
-                    try {
-                        synchronized (session) {
-                            session.sendMessage(textMessage);
-                        }
-                    } catch (IOException e) {
-                        logger.error("推送日志失败: sessionId={}", session.getId(), e);
-                    }
-                }
+            // 放入队列异步发送，避免阻塞日志写入
+            if (!messageQueue.offer(new LogMessage(appCode, message))) {
+                logger.warn("WebSocket消息队列已满，丢弃消息: appCode={}", appCode);
             }
         } catch (Exception e) {
             logger.error("序列化日志失败", e);

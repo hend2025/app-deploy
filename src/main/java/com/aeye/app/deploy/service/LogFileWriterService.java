@@ -85,8 +85,7 @@ public class LogFileWriterService implements CommandLineRunner {
      * 获取最大文件大小（字节）
      */
     private long getMaxFileSize() {
-        return (long) maxFileSizeMb * 1024;
-//        return (long) maxFileSizeMb * 1024 * 1024;
+        return (long) maxFileSizeMb * 1024 * 1024;
     }
 
     @Override

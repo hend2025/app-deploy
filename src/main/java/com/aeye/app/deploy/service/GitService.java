@@ -45,6 +45,11 @@ public class GitService {
     public String cloneOrPull(String appCode, String gitUrl, String gitAcct, String gitPwd, 
                               String branchOrTag, BiConsumer<String, String> logConsumer) throws Exception {
         
+        // 验证branchOrTag，防止命令注入
+        if (!isValidBranchOrTag(branchOrTag)) {
+            throw new IllegalArgumentException("无效的分支/Tag名称: " + branchOrTag);
+        }
+        
         // 构建带认证的Git URL
         String authUrl = buildAuthUrl(gitUrl, gitAcct, gitPwd);
         
@@ -56,7 +61,14 @@ public class GitService {
             logConsumer.accept("INFO", "检测到已有仓库，执行更新操作...");
             executeGitCommand(workDir, new String[]{"git", "fetch", "--all", "--tags"}, logConsumer);
             executeGitCommand(workDir, new String[]{"git", "checkout", branchOrTag}, logConsumer);
-            executeGitCommand(workDir, new String[]{"git", "pull", "origin", branchOrTag}, logConsumer);
+            
+            // 判断是分支还是Tag，只有分支才执行pull
+            if (isBranch(workDir, branchOrTag, logConsumer)) {
+                logConsumer.accept("INFO", "检测到是分支，执行pull操作...");
+                executeGitCommand(workDir, new String[]{"git", "pull", "origin", branchOrTag}, logConsumer);
+            } else {
+                logConsumer.accept("INFO", "检测到是Tag，跳过pull操作");
+            }
         } else {
             // 不存在仓库，执行clone
             logConsumer.accept("INFO", "开始克隆仓库: " + gitUrl);
@@ -66,6 +78,38 @@ public class GitService {
         
         logConsumer.accept("INFO", "代码拉取完成，工作目录: " + workDir.getAbsolutePath());
         return workDir.getAbsolutePath();
+    }
+    
+    /**
+     * 验证分支/Tag名称是否合法（防止命令注入）
+     */
+    private boolean isValidBranchOrTag(String branchOrTag) {
+        if (branchOrTag == null || branchOrTag.trim().isEmpty()) {
+            return false;
+        }
+        // 只允许字母、数字、下划线、横线、点、斜杠
+        return branchOrTag.matches("^[a-zA-Z0-9_\\-./]+$");
+    }
+    
+    /**
+     * 判断是否为分支（而非Tag）
+     */
+    private boolean isBranch(File workDir, String branchOrTag, BiConsumer<String, String> logConsumer) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("git", "branch", "-r", "--list", "origin/" + branchOrTag);
+            pb.directory(workDir);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line = reader.readLine();
+                process.waitFor();
+                return line != null && !line.trim().isEmpty();
+            }
+        } catch (Exception e) {
+            logConsumer.accept("WARN", "判断分支/Tag类型失败: " + e.getMessage());
+            return false;
+        }
     }
 
     /**

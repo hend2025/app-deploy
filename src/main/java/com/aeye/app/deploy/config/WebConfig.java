@@ -28,15 +28,17 @@ public class WebConfig implements WebMvcConfigurer {
         // 将所有前端路由指向index.html
         registry.addViewController("/").setViewName("forward:/index.html");
         registry.addViewController("/appMgt").setViewName("forward:/index.html");
+        registry.addViewController("/logFiles").setViewName("forward:/index.html");
     }
 
     @Override
     public void addCorsMappings(CorsRegistry registry) {
-        // 配置CORS
+        // 配置CORS - 生产环境应限制允许的来源
         registry.addMapping("/**")
-                .allowedOrigins("*")
+                .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*")
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
+                .allowCredentials(true)
                 .maxAge(3600);
     }
 

@@ -15,7 +15,8 @@ spring:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    # 生产环境应注释掉SQL日志
+    # log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
       id-type: input
@@ -27,7 +28,13 @@ app:
     archive: /home/archive
     logs: /home/logs
   log:
-    cache-size: 100
-    flush-size: 10
+    cache-size: 5000
+    flush-size: 500
     flush-interval-minutes: 5
     max-file-size-mb: 20
+  # 资源限制配置
+  process:
+    max-concurrent-builds: 10
+    max-concurrent-startups: 100
+  websocket:
+    max-connections: 100

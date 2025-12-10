@@ -191,18 +191,23 @@ export default {
 -Dlogging.level.root=info`
 
     /**
+     * 排序比较函数（提取为独立函数避免重复创建）
+     */
+    const sortByAppCode = (a, b) => {
+      const aIsNumber = !isNaN(a.appCode) && !isNaN(parseInt(a.appCode))
+      const bIsNumber = !isNaN(b.appCode) && !isNaN(parseInt(b.appCode))
+      if (aIsNumber && bIsNumber) return parseInt(a.appCode) - parseInt(b.appCode)
+      if (aIsNumber && !bIsNumber) return -1
+      if (!aIsNumber && bIsNumber) return 1
+      return a.appCode.localeCompare(b.appCode)
+    }
+
+    /**
      * 计算属性：排序后的应用列表
      * 数字编码优先，按数值排序；字符串编码按字母排序
      */
     const sortedAppList = computed(() => {
-      return [...appList.value].sort((a, b) => {
-        const aIsNumber = !isNaN(a.appCode) && !isNaN(parseInt(a.appCode))
-        const bIsNumber = !isNaN(b.appCode) && !isNaN(parseInt(b.appCode))
-        if (aIsNumber && bIsNumber) return parseInt(a.appCode) - parseInt(b.appCode)
-        if (aIsNumber && !bIsNumber) return -1
-        if (!aIsNumber && bIsNumber) return 1
-        return a.appCode.localeCompare(b.appCode)
-      })
+      return [...appList.value].sort(sortByAppCode)
     })
 
     /**
@@ -367,7 +372,6 @@ export default {
     }
 
     onMounted(() => { searchApps() })
-    onUnmounted(() => { })
 
     return {
       searchText, appList, loading, currentApp, startForm,

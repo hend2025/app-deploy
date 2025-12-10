@@ -45,13 +45,20 @@ public class BuildTaskService {
 
     private final Map<String, Process> cmdMap = new ConcurrentHashMap<>();
     
-    private static final int MAX_CONCURRENT_BUILDS = 10;
+    @Value("${app.process.max-concurrent-builds:10}")
+    private int maxConcurrentBuilds;
     
-    private final ExecutorService executorService = Executors.newFixedThreadPool(MAX_CONCURRENT_BUILDS, r -> {
-        Thread thread = new Thread(r, "build-task-thread");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private ExecutorService executorService;
+    
+    @javax.annotation.PostConstruct
+    public void init() {
+        executorService = Executors.newFixedThreadPool(maxConcurrentBuilds, r -> {
+            Thread thread = new Thread(r, "build-task-thread");
+            thread.setDaemon(true);
+            return thread;
+        });
+        logger.info("BuildTaskService初始化完成，最大并发构建数: {}", maxConcurrentBuilds);
+    }
 
     private boolean isWindows() {
         return System.getProperty("os.name").toLowerCase().contains("win");
@@ -104,9 +111,9 @@ public class BuildTaskService {
         int activeBuilds = (int) cmdMap.values().stream()
                 .filter(p -> p != null && p.isAlive())
                 .count();
-        if (activeBuilds >= MAX_CONCURRENT_BUILDS) {
+        if (activeBuilds >= maxConcurrentBuilds) {
             logger.warn("当前并发构建任务数已达到上限: {}", activeBuilds);
-            throw new IllegalStateException("当前并发构建任务数已达到上限(" + MAX_CONCURRENT_BUILDS + ")，请等待其他构建任务完成");
+            throw new IllegalStateException("当前并发构建任务数已达到上限(" + maxConcurrentBuilds + ")，请等待其他构建任务完成");
         }
 
         // 获取构建脚本
@@ -172,6 +179,7 @@ public class BuildTaskService {
                 
                 // 读取进程输出并写入内存缓冲
                 final Process finalProcess = process;
+                final java.util.concurrent.CountDownLatch outputLatch = new java.util.concurrent.CountDownLatch(1);
                 Thread outputReader = new Thread(() -> {
                     try (BufferedReader reader = new BufferedReader(
                             new InputStreamReader(finalProcess.getInputStream(), StandardCharsets.UTF_8))) {
@@ -181,12 +189,21 @@ public class BuildTaskService {
                         }
                     } catch (Exception e) {
                         logger.error("读取构建输出失败: {}", appCode, e);
+                    } finally {
+                        outputLatch.countDown();
                     }
                 }, "build-log-reader-" + appCode);
                 outputReader.setDaemon(true);
                 outputReader.start();
 
                 int exitCode = process.waitFor();
+                
+                // 等待日志读取线程完成，最多等待5秒
+                try {
+                    outputLatch.await(5, TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
 
                 // 更新任务状态
                 if (exitCode == 0) {
@@ -197,7 +214,7 @@ public class BuildTaskService {
                     // 步骤3：归档文件
                     if (appVersion.getArchiveFiles() != null && !appVersion.getArchiveFiles().trim().isEmpty()) {
                         logBufferService.addLog(appCode, branchOrTag, "INFO", "===== 步骤3: 归档文件 =====", new Date());
-                        archiveFiles(branchOrTag, workDir, appVersion.getArchiveFiles(),
+                        archiveFiles(appCode, branchOrTag, workDir, appVersion.getArchiveFiles(),
                             (level, msg) -> logBufferService.addLog(appCode, branchOrTag, level, msg, new Date()));
                     }
                     
@@ -241,12 +258,12 @@ public class BuildTaskService {
     }
 
 
-    private void archiveFiles(String branchOrTag, String workDir, String archiveFiles,
+    private void archiveFiles(String appCode, String branchOrTag, String workDir, String archiveFiles,
                               java.util.function.BiConsumer<String, String> logConsumer) {
-        // 创建归档目录
-        File archivePath = new File(archiveDir);
-        if (!archivePath.exists()) {
-            archivePath.mkdirs();
+        // 创建归档目录：archiveDir/appCode/
+        File appArchivePath = new File(archiveDir, appCode);
+        if (!appArchivePath.exists()) {
+            appArchivePath.mkdirs();
         }
         
         // 清理分支/tag名称中的特殊字符
@@ -283,7 +300,7 @@ public class BuildTaskService {
                     }
                     
                     for (Path matchedFile : matchedFiles) {
-                        archiveSingleFile(matchedFile.toFile(), archivePath, safeBranchName, logConsumer);
+                        archiveSingleFile(matchedFile.toFile(), appArchivePath, safeBranchName, logConsumer);
                     }
                 } catch (IOException e) {
                     logConsumer.accept("ERROR", "遍历目录失败: " + pattern + ", 原因: " + e.getMessage());
@@ -295,7 +312,7 @@ public class BuildTaskService {
                     logConsumer.accept("WARN", "归档文件不存在: " + pattern);
                     continue;
                 }
-                archiveSingleFile(sourceFile, archivePath, safeBranchName, logConsumer);
+                archiveSingleFile(sourceFile, appArchivePath, safeBranchName, logConsumer);
             }
         }
     }

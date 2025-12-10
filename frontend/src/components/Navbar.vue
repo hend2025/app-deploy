@@ -17,6 +17,7 @@
     <!-- 导航菜单项 -->
     <el-menu-item index="/deploy/">版本构建</el-menu-item>
     <el-menu-item index="/deploy/appMgt">应用启动</el-menu-item>
+    <el-menu-item index="/deploy/logFiles">日志文件</el-menu-item>
   </el-menu>
 </template>
 
