@@ -137,7 +137,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { appMgtApi, verBuildApi } from '../api'
 import LogModal from '../components/LogModal.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -366,9 +366,9 @@ export default {
         selectedRow.value = null
         searchApps()
       } catch (error) {
-        if (error !== 'cancel') {
-          ElMessage.error('删除失败: ' + error.message)
-        }
+        // 用户点击取消时不显示错误
+        if (error === 'cancel' || error?.message === 'cancel') return
+        ElMessage.error('删除失败: ' + (error?.message || error))
       }
     }
 
@@ -385,12 +385,22 @@ export default {
     }
 
     /**
+     * 计算属性：appCode到appName的映射表（性能优化）
+     */
+    const appNameMap = computed(() => {
+      const map = new Map()
+      appBuildList.value.forEach(item => {
+        map.set(item.appCode, item.appName || item.appCode)
+      })
+      return map
+    })
+
+    /**
      * 根据appCode获取appName
      */
     const getAppName = (appCode) => {
       if (!appCode) return '-'
-      const app = appBuildList.value.find(item => item.appCode === appCode)
-      return app ? app.appName : appCode
+      return appNameMap.value.get(appCode) || appCode
     }
 
     onMounted(() => {
