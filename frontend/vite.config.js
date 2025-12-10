@@ -29,6 +29,11 @@ export default defineConfig({
       '/deploy/logs': {
         target: 'http://127.0.0.1:7080',
         changeOrigin: true
+      },
+      '/deploy/ws': {
+        target: 'ws://127.0.0.1:7080',
+        ws: true,
+        changeOrigin: true
       }
     }
   },

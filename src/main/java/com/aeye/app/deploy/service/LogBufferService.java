@@ -21,6 +21,9 @@ public class LogBufferService implements CommandLineRunner {
     @Autowired
     private LogFileWriterService logFileWriterService;
 
+    @Autowired
+    private LogWebSocketHandler logWebSocketHandler;
+
     @Value("${app.log.cache-size:5000}")
     private int maxBufferSizePerApp;
 
@@ -76,6 +79,9 @@ public class LogBufferService implements CommandLineRunner {
 
         // 异步写入日志文件
         logFileWriterService.addLog(appCode, logType, version, logLevel, logContent, logTime);
+
+        // WebSocket推送日志
+        logWebSocketHandler.pushLog(log);
     }
 
     private AppLog createAppLog(String appCode, String version, String logLevel, String logContent, Date logTime) {

@@ -10,16 +10,12 @@
       <div class="dialog-header">
         <span class="dialog-title">日志详情 - {{ currentAppCode }}</span>
         <div class="dialog-actions">
-          <el-button 
-            :type="autoRefreshEnabled ? 'warning' : 'success'"
-            size="small"
-            @click="toggleAutoRefresh"
-          >
-            {{ autoRefreshEnabled ? '停止刷新' : '自动刷新' }}
-          </el-button>
+          <el-tag :type="wsConnected ? 'success' : 'danger'" size="small" style="margin-right: 8px;">
+            {{ wsConnected ? '已连接' : '未连接' }}
+          </el-tag>
           <el-button type="info" size="small" @click="scrollToBottom">到底部</el-button>
           <el-button type="warning" size="small" @click="clearLogContent">清空</el-button>
-          <el-button size="small" @click="visible = false">关闭</el-button>
+          <el-button size="small" @click="closeDialog">关闭</el-button>
         </div>
       </div>
     </template>
@@ -34,127 +30,121 @@
 </template>
 
 <script>
-import { ref, onUnmounted, nextTick } from 'vue'
+import { ref, onUnmounted, onMounted, nextTick } from 'vue'
 import { logApi } from '../api'
 
 export default {
   name: 'LogModal',
   setup() {
-    // 响应式状态
-    const visible = ref(false)           // 模态框显示状态
-    const currentAppCode = ref('')        // 当前查看的应用编码
-    const logs = ref([])                  // 日志列表
-    const autoRefreshEnabled = ref(false) // 自动刷新开关
-    const logContent = ref(null)          // 日志容器DOM引用
+    const visible = ref(false)
+    const currentAppCode = ref('')
+    const logs = ref([])
+    const logContent = ref(null)
+    const wsConnected = ref(false)
     
-    // 非响应式变量
-    let autoRefreshInterval = null        // 自动刷新定时器
-    let lastSeq = 0                       // 最后一条日志的序号（用于增量读取）
+    let ws = null
+    let lastSeq = 0
+    let maxLogSize = 5000 // 默认值，会从后端获取
 
-    /**
-     * 显示日志模态框
-     * 对外暴露的方法，由父组件调用
-     * @param {string} appCode - 应用编码
-     */
-    const showLog = (appCode) => {
-      // 清理之前的状态
-      if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval)
-        autoRefreshInterval = null
-      }
-      autoRefreshEnabled.value = false
-      lastSeq = 0
-      
-      currentAppCode.value = appCode
-      logs.value = []
-      visible.value = true
-      fetchIncrementalLogs()
-      
-      // 3秒后自动开启刷新
-      setTimeout(() => {
-        if (visible.value && !autoRefreshEnabled.value) {
-          toggleAutoRefresh()
+    // 组件挂载时从后端获取配置
+    onMounted(async () => {
+      try {
+        const config = await logApi.getConfig()
+        if (config && config.cacheSize) {
+          maxLogSize = config.cacheSize
         }
-      }, 3000)
+      } catch (e) {
+        console.warn('获取日志配置失败，使用默认值:', e)
+      }
+    })
+
+    const getWsUrl = (appCode) => {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      const host = window.location.host
+      return `${protocol}//${host}/deploy/ws/logs?appCode=${appCode}`
     }
 
-    /**
-     * 增量读取新日志
-     * 只获取lastSeq之后的新日志，避免重复
-     */
-    const fetchIncrementalLogs = async () => {
+    const connectWebSocket = (appCode) => {
+      if (ws) ws.close()
+      const url = getWsUrl(appCode)
+      ws = new WebSocket(url)
+      ws.onopen = () => {
+        wsConnected.value = true
+      }
+      ws.onmessage = (event) => {
+        try {
+          const log = JSON.parse(event.data)
+          logs.value.push(log)
+          // 超过最大条数时删除最旧的日志
+          while (logs.value.length > maxLogSize) {
+            logs.value.shift()
+          }
+          nextTick(() => scrollToBottom())
+        } catch (e) {
+          console.error('解析日志失败:', e)
+        }
+      }
+      ws.onclose = () => { wsConnected.value = false }
+      ws.onerror = () => { wsConnected.value = false }
+    }
+
+    const closeWebSocket = () => {
+      if (ws) { ws.close(); ws = null }
+      wsConnected.value = false
+    }
+
+    const fetchHistoryLogs = async () => {
       try {
-        const response = await logApi.incremental(currentAppCode.value, lastSeq, 5000)
-        const newLogs = response.logs || []
-        if (newLogs.length > 0) {
-          logs.value.push(...newLogs)
-          lastSeq = newLogs[newLogs.length - 1].seq || lastSeq
+        const response = await logApi.incremental(currentAppCode.value, 0, 5000)
+        const historyLogs = response.logs || []
+        if (historyLogs.length > 0) {
+          logs.value = historyLogs
+          lastSeq = historyLogs[historyLogs.length - 1].seq || 0
           await nextTick()
           scrollToBottom()
         }
       } catch (error) {
-        console.error('增量加载日志失败:', error)
+        console.error('加载历史日志失败:', error)
       }
     }
 
-    /**
-     * 切换自动刷新状态
-     */
-    const toggleAutoRefresh = () => {
-      if (autoRefreshEnabled.value) {
-        if (autoRefreshInterval) {
-          clearInterval(autoRefreshInterval)
-          autoRefreshInterval = null
-        }
-        autoRefreshEnabled.value = false
-      } else {
-        fetchIncrementalLogs()
-        autoRefreshInterval = setInterval(fetchIncrementalLogs, 3000)
-        autoRefreshEnabled.value = true
-      }
+    const showLog = async (appCode) => {
+      closeWebSocket()
+      lastSeq = 0
+      currentAppCode.value = appCode
+      logs.value = []
+      visible.value = true
+      await fetchHistoryLogs()
+      connectWebSocket(appCode)
     }
 
-    /**
-     * 滚动到日志底部
-     */
     const scrollToBottom = () => {
       if (logContent.value) {
         nextTick(() => { logContent.value.scrollTop = logContent.value.scrollHeight })
       }
     }
 
-    /**
-     * 清空日志显示
-     */
-    const clearLogContent = () => {
+    const clearLogContent = () => { logs.value = []; lastSeq = 0 }
+
+    const handleClose = () => { closeWebSocket(); logs.value = []; lastSeq = 0 }
+
+    const closeDialog = () => { 
+      closeWebSocket()
       logs.value = []
       lastSeq = 0
+      visible.value = false
     }
 
-    /**
-     * 模态框关闭时的清理操作
-     */
-    const handleClose = () => {
-      if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval)
-        autoRefreshInterval = null
-      }
-      autoRefreshEnabled.value = false
-      logs.value = []
-      lastSeq = 0
-    }
-
-    onUnmounted(() => {
-      if (autoRefreshInterval) clearInterval(autoRefreshInterval)
-    })
+    onUnmounted(() => { closeWebSocket() })
 
     return {
-      visible, currentAppCode, logs, autoRefreshEnabled, logContent,
-      showLog, toggleAutoRefresh, scrollToBottom, clearLogContent, handleClose
+      visible, currentAppCode, logs, logContent, wsConnected,
+      showLog, scrollToBottom, clearLogContent, handleClose, closeDialog
     }
   }
 }
 </script>
+
 
 <style scoped>
 .log-content {
@@ -188,6 +178,6 @@ export default {
 .empty-tip { text-align: center; color: #909399; padding: 50px; }
 .dialog-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
 .dialog-title { font-size: 18px; font-weight: 600; }
-.dialog-actions { display: flex; gap: 8px; }
+.dialog-actions { display: flex; gap: 8px; align-items: center; }
 .dialog-actions .el-button { height: 32px; padding: 0 16px; }
 </style>

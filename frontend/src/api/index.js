@@ -198,6 +198,13 @@ export const logApi = {
    */
   incremental(appCode, afterSeq = 0, limit = 1000) {
     return api.get('/logs/buffer/incremental', { params: { appCode, afterSeq, limit } })
+  },
+
+  /**
+   * 获取日志配置
+   */
+  getConfig() {
+    return api.get('/logs/config')
   }
 
 }
