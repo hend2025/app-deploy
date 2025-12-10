@@ -28,7 +28,6 @@ public class WebConfig implements WebMvcConfigurer {
         // 将所有前端路由指向index.html
         registry.addViewController("/").setViewName("forward:/index.html");
         registry.addViewController("/appMgt").setViewName("forward:/index.html");
-        registry.addViewController("/about").setViewName("forward:/index.html");
     }
 
     @Override

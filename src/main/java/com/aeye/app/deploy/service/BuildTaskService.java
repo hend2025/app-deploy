@@ -110,12 +110,10 @@ public class BuildTaskService {
         }
 
         // 获取构建脚本
-        String scriptContent = appVersion.getBuildScript();
+        final String scriptContent = appVersion.getBuildScript();
         if (scriptContent == null || scriptContent.trim().isEmpty()) {
             throw new IllegalStateException("未配置构建脚本");
         }
-        
-        final String finalScriptContent = scriptContent;
         
         // 立即更新状态为构建中
         verMgtService.updateStatus(appCode, "1", null);
@@ -154,7 +152,7 @@ public class BuildTaskService {
                 logBufferService.addLog(appCode, branchOrTag, "INFO", "===== 步骤2: 执行构建脚本 =====", new Date());
                 
                 // 创建临时脚本文件
-                tempScriptFile = createTempScript(appCode, finalScriptContent, branchOrTag);
+                tempScriptFile = createTempScript(appCode, scriptContent, branchOrTag);
                 logger.info("创建临时脚本: {}", tempScriptFile.getAbsolutePath());
 
                 // 执行脚本

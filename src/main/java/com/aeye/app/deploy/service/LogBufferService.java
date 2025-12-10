@@ -52,33 +52,11 @@ public class LogBufferService implements CommandLineRunner {
         logger.info("日志缓冲服务启动，每应用缓存大小: {}", maxBufferSizePerApp);
     }
 
-    /**
-     * 添加日志到缓冲区（默认为构建日志类型）
-     *
-     * @param appCode    应用编码
-     * @param version    版本号
-     * @param logLevel   日志级别
-     * @param logContent 日志内容
-     * @param logTime    日志时间
-     */
     public void addLog(String appCode, String version, String logLevel, String logContent, Date logTime) {
         addLog(appCode, version, logLevel, logContent, logTime, LogFileWriterService.LOG_TYPE_BUILD);
     }
 
-    /**
-     * 添加日志到缓冲区（指定日志类型）
-     * <p>
-     * 日志会被添加到对应应用的独立缓冲区，超过最大容量时自动删除旧日志。
-     * 同时异步写入到日志文件。
-     *
-     * @param appCode    应用编码
-     * @param version    版本号
-     * @param logLevel   日志级别
-     * @param logContent 日志内容
-     * @param logTime    日志时间
-     * @param logType    日志类型（build/console）
-     */
-    public void addLog(String appCode, String version, String logLevel, String logContent, 
+    public void addLog(String appCode, String version, String logLevel, String logContent,
                        Date logTime, String logType) {
         AppLogBuffer buffer = getOrCreateBuffer(appCode);
         AppLog log = createAppLog(appCode, version, logLevel, logContent, logTime);
@@ -100,9 +78,6 @@ public class LogBufferService implements CommandLineRunner {
         logFileWriterService.addLog(appCode, logType, version, logLevel, logContent, logTime);
     }
 
-    /**
-     * 创建AppLog对象
-     */
     private AppLog createAppLog(String appCode, String version, String logLevel, String logContent, Date logTime) {
         AppLog log = new AppLog();
         log.setAppCode(appCode);
@@ -114,31 +89,6 @@ public class LogBufferService implements CommandLineRunner {
         return log;
     }
 
-    /**
-     * 获取所有应用的缓冲区总大小
-     */
-    public int getTotalBufferSize() {
-        return appBuffers.values().stream().mapToInt(b -> b.size.get()).sum();
-    }
-
-    /**
-     * 兼容旧接口
-     */
-    public int getBufferSize() {
-        return getTotalBufferSize();
-    }
-
-
-    /**
-     * 增量读取日志
-     * <p>
-     * 返回指定序号之后的新日志，用于客户端轮询获取增量数据
-     *
-     * @param appCode  应用编码
-     * @param afterSeq 上次读取的最后序号，返回大于此序号的日志
-     * @param limit    最大返回条数
-     * @return 增量日志列表（按序号升序）
-     */
     public List<AppLog> getLogsIncremental(String appCode, long afterSeq, int limit) {
         List<AppLog> result = new ArrayList<>();
 
@@ -156,13 +106,6 @@ public class LogBufferService implements CommandLineRunner {
             }
         }
         return result;
-    }
-
-    /**
-     * 获取当前最大序号
-     */
-    public long getCurrentSequence() {
-        return logSequence.get();
     }
 
     /**

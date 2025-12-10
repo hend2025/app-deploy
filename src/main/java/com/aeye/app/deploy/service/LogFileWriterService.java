@@ -505,24 +505,6 @@ public class LogFileWriterService implements CommandLineRunner {
         }
     }
 
-    /**
-     * 清除指定应用和类型的缓冲区
-     */
-    public void clearBuffer(String appCode, String logType) {
-        LogFileBuffer buffer = buffers.remove(getBufferKey(appCode, logType));
-        if (buffer != null) {
-            logger.info("已清除应用[{}]类型[{}]的日志文件缓冲区", appCode, logType);
-        }
-    }
-
-    /**
-     * 清除指定应用的所有缓冲区
-     */
-    public void clearAllBuffers(String appCode) {
-        clearBuffer(appCode, LOG_TYPE_BUILD);
-        clearBuffer(appCode, LOG_TYPE_CONSOLE);
-    }
-
     @PreDestroy
     public void shutdown() {
         logger.info("正在关闭日志文件写入服务...");

@@ -26,7 +26,7 @@ public class AppLogService {
         Map<String, Object> result = new HashMap<>();
         try {
             List<AppLog> logs = logBufferService.getLogsIncremental(appCode, afterSeq, limit);
-            long currentSeq = logBufferService.getCurrentSequence();
+            long currentSeq = 0;
             if (!logs.isEmpty()) {
                 currentSeq = logs.stream().mapToLong(AppLog::getSeq).max().orElse(currentSeq);
             }
@@ -34,7 +34,6 @@ public class AppLogService {
             result.put("logs", logs);
             result.put("count", logs.size());
             result.put("currentSeq", currentSeq);
-            result.put("bufferSize", logBufferService.getBufferSize());
             result.put("message", "查询成功");
         } catch (Exception e) {
             logger.error("增量读取日志失败", e);
