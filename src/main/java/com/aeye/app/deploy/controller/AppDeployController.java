@@ -135,7 +135,7 @@ public class AppDeployController {
      * <p>
      * 异步启动指定版本的JAR应用，支持自定义JVM参数
      *
-     * @param request 请求参数：svcCode-微服务编码，version-版本号，params-JVM参数
+     * @param request 请求参数：svcCode-微服务名，version-版本号，params-JVM参数
      * @return 启动结果
      */
     @PostMapping("/start")
@@ -149,7 +149,7 @@ public class AppDeployController {
             if (svcCode == null || svcCode.trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "微服务编码不能为空");
+                response.put("message", "微服务名不能为空");
                 return ResponseEntity.ok(response);
             }
             
@@ -157,7 +157,7 @@ public class AppDeployController {
             if (!isValidAppCode(svcCode)) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "微服务编码格式不正确");
+                response.put("message", "微服务名格式不正确");
                 return ResponseEntity.ok(response);
             }
 
@@ -165,7 +165,7 @@ public class AppDeployController {
             if (appInfo == null) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "微服务编码不存在");
+                response.put("message", "微服务名不存在");
                 return ResponseEntity.ok(response);
             }
 
@@ -207,7 +207,7 @@ public class AppDeployController {
             if (appInfo.getSvcCode() == null || appInfo.getSvcCode().trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "微服务编码不能为空");
+                response.put("message", "微服务名不能为空");
                 return ResponseEntity.ok(response);
             }
 
@@ -229,7 +229,7 @@ public class AppDeployController {
     /**
      * 删除应用配置
      *
-     * @param request 请求参数：svcCode-微服务编码
+     * @param request 请求参数：svcCode-微服务名
      * @return 删除结果
      */
     @PostMapping("/delete")
@@ -240,7 +240,7 @@ public class AppDeployController {
             if (svcCode == null || svcCode.trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "微服务编码不能为空");
+                response.put("message", "微服务名不能为空");
                 return ResponseEntity.ok(response);
             }
 
@@ -264,7 +264,7 @@ public class AppDeployController {
      * <p>
      * 通过进程ID强制终止应用进程
      *
-     * @param request 请求参数：svcCode-微服务编码，pid-进程ID
+     * @param request 请求参数：svcCode-微服务名，pid-进程ID
      * @return 停止结果
      */
     @PostMapping("/stop")
@@ -277,7 +277,7 @@ public class AppDeployController {
             if (svcCode == null || svcCode.trim().isEmpty()) {
                 Map<String, Object> response = new HashMap<>();
                 response.put("success", false);
-                response.put("message", "微服务编码不能为空");
+                response.put("message", "微服务名不能为空");
                 return ResponseEntity.ok(response);
             }
 

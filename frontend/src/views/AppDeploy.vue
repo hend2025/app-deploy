@@ -35,14 +35,14 @@
           @current-change="handleCurrentChange"
       >
         <el-table-column type="index" width="70" label="序号" align="center" />
-        <el-table-column prop="svcCode" label="微服务编码">
+        <el-table-column prop="svcCode" label="微服务名">
           <template #default="{ row }">
             <strong>{{ row.svcCode }}</strong>
           </template>
         </el-table-column>
         <el-table-column prop="appCode" label="所属应用">
           <template #default="{ row }">
-            {{ getAppName(row.appCode) }}
+           <strong>{{ getAppName(row.appCode) }}</strong>
           </template>
         </el-table-column>
         <el-table-column prop="version" label="版本号">
@@ -72,51 +72,13 @@
       </el-table>
     </el-card>
 
-    <!-- 启动应用对话框 -->
-    <el-dialog v-model="startDialogVisible" title="启动应用" width="700px">
-      <el-form label-width="100px">
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="微服务编码">
-              <el-input :model-value="currentApp.svcCode" readonly />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item label="所属应用">
-              <el-input :model-value="currentApp.appCode" readonly />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="版本号">
-              <el-input v-model="startForm.version" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-form-item label="启动参数">
-          <el-input
-              v-model="startForm.params"
-              type="textarea"
-              :rows="10"
-              style="font-family: monospace;"
-          />
-          <div class="el-form-item__help">支持多行输入，每行一个参数</div>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="startDialogVisible = false">取消</el-button>
-        <el-button type="success" @click="confirmStart">确定启动</el-button>
-      </template>
-    </el-dialog>
-
     <!-- 停止应用对话框 -->
     <el-dialog v-model="stopDialogVisible" title="确认停止应用" width="450px">
       <el-alert type="warning" :closable="false" style="margin-bottom: 15px;">
         <template #title>此操作将强制终止应用进程</template>
       </el-alert>
       <el-descriptions :column="1" border>
-        <el-descriptions-item label="微服务编码">{{ currentApp.svcCode }}</el-descriptions-item>
+        <el-descriptions-item label="微服务名">{{ currentApp.svcCode }}</el-descriptions-item>
         <el-descriptions-item label="进程ID">
           <el-tag type="danger">{{ currentApp.pid }}</el-tag>
         </el-descriptions-item>
@@ -130,18 +92,18 @@
       </template>
     </el-dialog>
 
-    <!-- 新增/编辑应用对话框 -->
-    <el-dialog v-model="editDialogVisible" :title="isEdit ? '编辑应用' : '新增应用'" width="1000px">
-      <el-form :model="editForm" label-width="100px">
+    <!-- 新增/编辑/启动 共用对话框 -->
+    <el-dialog v-model="editDialogVisible" :title="dialogTitle" width="1000px">
+      <el-form :model="editForm" label-width="80px">
         <el-row :gutter="20">
-          <el-col :span="12">
-            <el-form-item label="微服务编码" required>
-              <el-input v-model="editForm.svcCode" :disabled="isEdit" placeholder="请输入微服务编码" />
+          <el-col :span="11">
+            <el-form-item label="微服务名" required>
+              <el-input v-model="editForm.svcCode" :disabled="dialogMode !== 'add'" placeholder="请输入微服务名" />
             </el-form-item>
           </el-col>
-          <el-col :span="12">
+          <el-col :span="7">
             <el-form-item label="所属应用">
-              <el-select v-model="editForm.appCode" placeholder="请选择所属应用" clearable filterable style="width: 100%;">
+              <el-select v-model="editForm.appCode" :disabled="dialogMode === 'start'" placeholder="请选择所属应用" clearable filterable style="width: 100%;">
                 <el-option
                     v-for="item in appBuildList"
                     :key="item.appCode"
@@ -151,9 +113,7 @@
               </el-select>
             </el-form-item>
           </el-col>
-        </el-row>
-        <el-row :gutter="20">
-          <el-col :span="12">
+          <el-col :span="6">
             <el-form-item label="版本号">
               <el-input v-model="editForm.version" placeholder="请输入版本号" />
             </el-form-item>
@@ -161,11 +121,13 @@
         </el-row>
         <el-form-item label="启动参数">
           <el-input v-model="editForm.params" type="textarea" :rows="15" placeholder="启动参数，每行一个" style="font-family: monospace;" />
+          <div class="el-form-item__help">支持多行输入，每行一个参数</div>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="saveApp">保存</el-button>
+        <el-button v-if="dialogMode === 'start'" type="success" @click="confirmStart">启动</el-button>
+        <el-button v-else type="primary" @click="saveApp">保存</el-button>
       </template>
     </el-dialog>
 
@@ -190,14 +152,18 @@ export default {
     const appBuildList = ref([])          // 应用构建列表（用于下拉框）
     const loading = ref(false)            // 加载状态
     const currentApp = ref({})            // 当前操作的应用
-    const startDialogVisible = ref(false) // 启动对话框显示状态
     const stopDialogVisible = ref(false)  // 停止对话框显示状态
-    const startForm = ref({ version: '', params: '' }) // 启动表单
     const editDialogVisible = ref(false)  // 编辑对话框显示状态
-    const isEdit = ref(false)             // 是否为编辑模式
+    const dialogMode = ref('add')         // 对话框模式: add/edit/start
     const editForm = ref({ svcCode: '', appCode: '', version: '', params: '' }) // 编辑表单
     const logModal = ref(null)            // 日志模态框引用
     const selectedRow = ref(null)         // 当前选中的行
+
+    // 对话框标题
+    const dialogTitle = computed(() => {
+      const titles = { add: '新增服务', edit: '编辑服务', start: '启动服务' }
+      return titles[dialogMode.value] || '服务配置'
+    })
 
     /**
      * 表格行选中事件处理
@@ -260,9 +226,14 @@ export default {
      */
     const startApp = (app) => {
       currentApp.value = app
-      startForm.value.version = app.version || '-'
-      startForm.value.params = app.params || defaultParams
-      startDialogVisible.value = true
+      dialogMode.value = 'start'
+      editForm.value = {
+        svcCode: app.svcCode || '',
+        appCode: app.appCode || '',
+        version: app.version || '',
+        params: app.params || defaultParams
+      }
+      editDialogVisible.value = true
     }
 
     /**
@@ -271,12 +242,12 @@ export default {
     const confirmStart = async () => {
       try {
         await appMgtApi.startApp({
-          svcCode: currentApp.value.svcCode,
-          version: startForm.value.version,
-          params: startForm.value.params
+          svcCode: editForm.value.svcCode,
+          version: editForm.value.version,
+          params: editForm.value.params
         })
-        ElMessage.success(`应用启动成功: ${currentApp.value.svcCode}`)
-        startDialogVisible.value = false
+        ElMessage.success(`应用启动成功: ${editForm.value.svcCode}`)
+        editDialogVisible.value = false
         setTimeout(() => searchApps(false), 1000)
       } catch (error) {
         ElMessage.error('启动应用失败: ' + error.message)
@@ -335,7 +306,7 @@ export default {
      * 打开新增应用对话框
      */
     const addApp = () => {
-      isEdit.value = false
+      dialogMode.value = 'add'
       editForm.value = { svcCode: '', appCode: '', version: '', params: defaultParams }
       editDialogVisible.value = true
     }
@@ -348,7 +319,7 @@ export default {
         ElMessage.warning('请先选择要修改的记录')
         return
       }
-      isEdit.value = true
+      dialogMode.value = 'edit'
       editForm.value = {
         svcCode: row.svcCode || '',
         appCode: row.appCode || '',
@@ -363,7 +334,7 @@ export default {
      */
     const saveApp = async () => {
       if (!editForm.value.svcCode.trim()) {
-        ElMessage.warning('请输入微服务编码')
+        ElMessage.warning('请输入微服务名')
         return
       }
       try {
@@ -428,9 +399,9 @@ export default {
     })
 
     return {
-      searchText, appList, appBuildList, loading, currentApp, startForm,
-      startDialogVisible, stopDialogVisible, sortedAppList,
-      editDialogVisible, isEdit, editForm, selectedRow, handleCurrentChange,
+      searchText, appList, appBuildList, loading, currentApp,
+      stopDialogVisible, sortedAppList,
+      editDialogVisible, dialogMode, dialogTitle, editForm, selectedRow, handleCurrentChange,
       searchApps, startApp, confirmStart, stopApp, confirmStop,
       viewLogs, getStatusText, formatDateTime, addApp, editApp, saveApp, deleteApp, logModal,
       getAppName
@@ -468,6 +439,7 @@ export default {
 }
 .action-buttons .el-button {
   margin: 0;
+  height: 28px;
   min-width: 60px;
 }
 :deep(.el-table__body tr.current-row > td.el-table__cell) {
