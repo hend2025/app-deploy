@@ -418,10 +418,7 @@ public class LogFileWriterService implements CommandLineRunner {
     private String formatLogLine(AppLog log) {
         StringBuilder sb = new StringBuilder();
         sb.append(logTimeFormat.get().format(log.getLogTime()));
-        sb.append(" [").append(log.getLogLevel() != null ? log.getLogLevel() : "INFO").append("] ");
-        if (log.getVersion() != null && !log.getVersion().isEmpty()) {
-            sb.append("[").append(log.getVersion()).append("] ");
-        }
+        sb.append(" ");
         sb.append(log.getLogContent());
         return sb.toString();
     }

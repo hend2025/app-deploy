@@ -19,11 +19,8 @@
         </div>
       </div>
     </template>
-    <div ref="logContent" class="log-content">
-      <div v-for="(log, index) in logs" :key="index" class="log-line" :class="'log-' + (log.logLevel || 'info').toLowerCase()">
-        <span class="log-time">{{ log.logTime }}</span>
-        <span class="log-text">{{ log.logContent }}</span>
-      </div>
+    <div ref="logContent" class="log-content" tabindex="0" @keydown.ctrl.a.prevent="selectAllLogs">
+      <div v-for="(log, index) in logs" :key="index" class="log-line" :class="'log-' + (log.logLevel || 'info').toLowerCase()">{{ log.logTime }} {{ log.logContent }}</div>
       <div v-if="logs.length === 0" class="empty-tip">暂无日志</div>
     </div>
   </el-dialog>
@@ -135,11 +132,21 @@ export default {
       visible.value = false
     }
 
+    const selectAllLogs = () => {
+      if (logContent.value) {
+        const range = document.createRange()
+        range.selectNodeContents(logContent.value)
+        const selection = window.getSelection()
+        selection.removeAllRanges()
+        selection.addRange(range)
+      }
+    }
+
     onUnmounted(() => { closeWebSocket() })
 
     return {
       visible, currentAppCode, logs, logContent, wsConnected,
-      showLog, scrollToBottom, clearLogContent, handleClose, closeDialog
+      showLog, scrollToBottom, clearLogContent, handleClose, closeDialog, selectAllLogs
     }
   }
 }
@@ -161,12 +168,8 @@ export default {
   padding: 4px 8px;
   border-radius: 3px;
   margin-bottom: 2px;
-  display: flex;
-  gap: 10px;
+  word-break: break-all;
 }
-.log-time { color: #909399; white-space: nowrap; }
-.log-level { font-weight: 600; width: 50px; }
-.log-text { flex: 1; word-break: break-all; }
 .log-debug { background: #f4f4f5; }
 .log-debug .log-level { color: #909399; }
 .log-info { background: #f0f9eb; }
@@ -175,9 +178,10 @@ export default {
 .log-warn .log-level { color: #e6a23c; }
 .log-error { background: #fef0f0; }
 .log-error .log-level { color: #f56c6c; }
-.empty-tip { text-align: center; color: #909399; padding: 50px; }
+
 .dialog-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
 .dialog-title { font-size: 18px; font-weight: 600; }
 .dialog-actions { display: flex; gap: 8px; align-items: center; }
 .dialog-actions .el-button { height: 32px; padding: 0 16px; }
+.empty-tip { text-align: center; color: #909399; padding: 50px; }
 </style>
