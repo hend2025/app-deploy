@@ -213,7 +213,7 @@ export default {
       if (showLoading) loading.value = true
       try {
         const response = await appMgtApi.getAppList(searchText.value)
-        appList.value = response.data
+        appList.value = response.data || []
       } catch (error) {
         ElMessage.error('搜索失败: ' + error.message)
       } finally {

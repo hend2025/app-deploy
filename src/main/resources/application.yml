@@ -24,9 +24,9 @@ mybatis-plus:
 
 app:
   directory:
-    workspace: /home/workspace
-    archive: /home/archive
-    logs: /home/logs
+    workspace: /home/aeye/workspace
+    archive: /home/aeye/archive
+    logs: /home/aeye/logs
   log:
     cache-size: 5000
     flush-size: 500
