@@ -22,20 +22,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-/**
- * JAR应用进程服务
- * <p>
- * 负责JAR应用的启动管理，包括：
- * <ul>
- *   <li>版本切换（复制指定版本JAR到运行位置）</li>
- *   <li>进程启动（支持自定义JVM参数）</li>
- *   <li>日志采集（实时读取进程输出到日志缓冲区）</li>
- * </ul>
- * 支持跨平台（Windows/Linux）运行。
- *
- * @author aeye
- * @since 1.0.0
- */
+import static com.aeye.app.deploy.service.LogFileWriterService.LOG_TYPE_CONSOLE;
+
 @Service
 public class JarProcessService {
     
@@ -98,6 +86,9 @@ public class JarProcessService {
         // 如果目标文件已存在，则替换
         Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
 
+        // 开始新的运行会话（递增运行次数）
+        logBufferService.startNewSession(appCode, LogFileWriterService.LOG_TYPE_CONSOLE, version);
+
         executorService.submit(() -> {
             try {
                 logger.info("开始启动应用: {}, 版本: {}", appCode, version);
@@ -158,7 +149,8 @@ public class JarProcessService {
 
             } catch (Exception e) {
                 logger.error("启动应用失败: {}, 版本: {}", appCode, version, e);
-                logBufferService.addLog(appCode, version, "ERROR", "启动应用失败: " + e.getMessage(), new Date());
+                logBufferService.addLog(appCode, version, "ERROR", "启动应用失败: " + e.getMessage(), new Date(),
+                        LogFileWriterService.LOG_TYPE_CONSOLE);
             }
         });
 
@@ -174,7 +166,8 @@ public class JarProcessService {
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    logBufferService.addLog(appCode, version, parseLogLevel(line), line, new Date());
+                    logBufferService.addLog(appCode, version, parseLogLevel(line), line, new Date(), 
+                            LogFileWriterService.LOG_TYPE_CONSOLE);
                 }
             } catch (Exception e) {
                 logger.error("读取进程输出失败: {}", appCode, e);

@@ -8,15 +8,6 @@ import lombok.Data;
 
 import java.util.Date;
 
-/**
- * 版本构建信息实体类
- * <p>
- * 用于管理应用的版本构建配置，包括Git仓库信息、构建脚本和归档配置等。
- * 对应数据库表：t_ver_info
- *
- * @author aeye
- * @since 1.0.0
- */
 @Data
 @TableName("t_ver_info")
 public class VerInfo {

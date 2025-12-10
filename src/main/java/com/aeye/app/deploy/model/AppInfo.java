@@ -8,15 +8,6 @@ import lombok.Data;
 
 import java.util.Date;
 
-/**
- * 应用信息实体类
- * <p>
- * 用于管理可部署的JAR应用配置信息，包括应用编码、版本号和启动参数等。
- * 对应数据库表：t_app_info
- *
- * @author aeye
- * @since 1.0.0
- */
 @Data
 @TableName("t_app_info")
 public class AppInfo {

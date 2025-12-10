@@ -8,9 +8,6 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.util.Map;
 
-/**
- * 应用日志控制器
- */
 @RestController
 @RequestMapping("/logs")
 public class AppLogController {
@@ -18,9 +15,6 @@ public class AppLogController {
     @Autowired
     private AppLogService appLogService;
 
-    /**
-     * 增量读取缓冲区日志（只返回 afterSeq 之后的新日志）
-     */
     @GetMapping("/buffer/incremental")
     public ResponseEntity<Map<String, Object>> getLogsIncremental(
             @RequestParam(required = false) String appCode,

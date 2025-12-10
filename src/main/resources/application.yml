@@ -27,6 +27,7 @@ app:
     archive: /home/archive
     logs: /home/logs
   log:
-    cache-size: 5000
-    flush-size: 500
+    cache-size: 100
+    flush-size: 10
     flush-interval-minutes: 5
+    max-file-size-mb: 20

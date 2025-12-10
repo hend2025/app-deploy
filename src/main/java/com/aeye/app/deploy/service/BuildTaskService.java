@@ -23,20 +23,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-/**
- * 构建任务服务
- * <p>
- * 负责应用的完整构建流程，包括：
- * <ul>
- *   <li>Git代码拉取（支持分支/Tag切换）</li>
- *   <li>构建脚本执行（支持Shell/Batch）</li>
- *   <li>构建产物归档（支持glob模式匹配）</li>
- * </ul>
- * 支持并发构建，最大并发数可配置。
- *
- * @author aeye
- * @since 1.0.0
- */
 @Service
 public class BuildTaskService {
     
@@ -51,49 +37,26 @@ public class BuildTaskService {
     @Autowired
     private GitService gitService;
 
-    /** 工作空间目录（Git仓库克隆位置） */
     @Value("${app.directory.workspace}")
     private String workspaceDir;
 
-    /** 归档目录（构建产物存放位置） */
     @Value("${app.directory.archive}")
     private String archiveDir;
 
-    /** 正在运行的构建进程映射：appCode -> Process */
     private final Map<String, Process> cmdMap = new ConcurrentHashMap<>();
     
-    /** 最大并发构建任务数 */
     private static final int MAX_CONCURRENT_BUILDS = 10;
     
-    /** 构建任务线程池 */
     private final ExecutorService executorService = Executors.newFixedThreadPool(MAX_CONCURRENT_BUILDS, r -> {
         Thread thread = new Thread(r, "build-task-thread");
         thread.setDaemon(true);
         return thread;
     });
 
-    /**
-     * 判断当前操作系统是否为Windows
-     */
     private boolean isWindows() {
         return System.getProperty("os.name").toLowerCase().contains("win");
     }
 
-
-
-    /**
-     * 创建临时脚本文件
-     * <p>
-     * 根据操作系统创建对应格式的脚本文件：
-     * - Windows: .cmd文件，添加UTF-8编码设置，使用CRLF换行
-     * - Linux: .sh文件，使用UTF-8编码，设置可执行权限
-     *
-     * @param appCode       应用编码
-     * @param scriptContent 脚本内容
-     * @param targetVersion 目标版本（保留参数）
-     * @return 临时脚本文件
-     * @throws IOException 文件创建失败
-     */
     private File createTempScript(String appCode, String scriptContent, String targetVersion) throws IOException {
         String processedContent = scriptContent;
 
@@ -123,20 +86,6 @@ public class BuildTaskService {
         return scriptFile;
     }
 
-    /**
-     * 启动构建任务
-     * <p>
-     * 异步执行完整构建流程：
-     * <ol>
-     *   <li>Git代码拉取（如配置了Git信息）</li>
-     *   <li>执行构建脚本</li>
-     *   <li>归档构建产物（如配置了归档文件）</li>
-     * </ol>
-     *
-     * @param appVersion  版本配置信息
-     * @param branchOrTag 要构建的分支或Tag名称
-     * @throws IllegalStateException 如果已有构建任务在运行或达到并发上限
-     */
     public void startBuild(VerInfo appVersion, String branchOrTag) {
         String appCode = appVersion.getAppCode();
         
@@ -171,8 +120,8 @@ public class BuildTaskService {
         // 立即更新状态为构建中
         verMgtService.updateStatus(appCode, "1", null);
         
-        // 清除该应用的日志缓存，避免显示上次构建的日志
-        logBufferService.clearBuffer(appCode);
+        // 开始新的构建会话（清除缓存并递增打包次数）
+        logBufferService.startNewSession(appCode, LogFileWriterService.LOG_TYPE_BUILD, branchOrTag);
         
         // 记录构建开始日志
         logBufferService.addLog(appCode, branchOrTag, "INFO", 
@@ -293,19 +242,7 @@ public class BuildTaskService {
         });
     }
 
-    /**
-     * 归档构建产物
-     * <p>
-     * 将构建产物复制到归档目录，支持：
-     * - 普通文件路径
-     * - glob模式匹配（如 target/*.jar）
-     * - 文件名中的版本号会被替换为分支/Tag名称
-     *
-     * @param branchOrTag  分支或Tag名称
-     * @param workDir      工作目录
-     * @param archiveFiles 归档文件配置（多个用逗号分隔）
-     * @param logConsumer  日志回调函数
-     */
+
     private void archiveFiles(String branchOrTag, String workDir, String archiveFiles,
                               java.util.function.BiConsumer<String, String> logConsumer) {
         // 创建归档目录
@@ -449,14 +386,7 @@ public class BuildTaskService {
         return "INFO";
     }
 
-    /**
-     * 停止构建任务
-     * <p>
-     * 终止正在执行的构建进程，等待3秒后强制终止
-     *
-     * @param appCode 应用编码
-     * @return true-停止成功，false-停止失败或任务不存在
-     */
+
     public boolean stopBuild(String appCode) {
         Process process = cmdMap.get(appCode);
         if (process != null && process.isAlive()) {

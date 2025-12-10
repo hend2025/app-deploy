@@ -9,16 +9,6 @@ import lombok.Data;
 
 import java.util.Date;
 
-/**
- * 应用日志实体类
- * <p>
- * 用于存储应用构建和运行过程中产生的日志信息。
- * 支持内存缓冲和数据库持久化两种存储方式。
- * 对应数据库表：t_app_log
- *
- * @author aeye
- * @since 1.0.0
- */
 @Data
 @TableName("t_app_log")
 public class AppLog {

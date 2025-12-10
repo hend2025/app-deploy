@@ -12,19 +12,6 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * 应用管理控制器
- * <p>
- * 提供JAR应用的生命周期管理接口，包括：
- * <ul>
- *   <li>应用列表查询（含进程状态检测）</li>
- *   <li>应用启动/停止</li>
- *   <li>应用配置的增删改</li>
- * </ul>
- *
- * @author aeye
- * @since 1.0.0
- */
 @RestController
 @RequestMapping("/appMgt")
 public class AppMgtController {
