@@ -35,6 +35,9 @@ public class BuildTaskService {
     private LogBufferService logBufferService;
 
     @Autowired
+    private LogFileWriterService logFileWriterService;
+
+    @Autowired
     private GitService gitService;
 
     @Value("${app.directory.workspace}")
@@ -252,6 +255,13 @@ public class BuildTaskService {
                     } catch (Exception e) {
                         logger.warn("删除临时脚本失败: {}", tempScriptFile.getAbsolutePath());
                     }
+                }
+                // 构建完成后立即刷新日志到文件
+                try {
+                    logFileWriterService.flushToFile(appCode);
+                    logger.info("构建日志已保存到文件: {}", appCode);
+                } catch (Exception e) {
+                    logger.error("刷新构建日志到文件失败: {}", appCode, e);
                 }
             }
         });
