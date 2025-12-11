@@ -1,5 +1,6 @@
 package com.aeye.app.deploy.service;
 
+import com.aeye.app.deploy.config.DirectoryConfig;
 import com.aeye.app.deploy.model.AppDeploy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,9 +27,8 @@ public class JarProcessService {
     
     private static final Logger logger = LoggerFactory.getLogger(JarProcessService.class);
     
-    /** JAR文件存放目录 */
-    @Value("${app.directory.archive:/home/archive}")
-    private String jarDir;
+    @Autowired
+    private DirectoryConfig directoryConfig;
     
     /** 最大并发启动任务数 */
     @Value("${app.process.max-concurrent-startups:10}")
@@ -82,6 +82,8 @@ public class JarProcessService {
         String sourceJarPath = null;
         String targetJarPath = null;
         File file = null;
+        
+        String jarDir = directoryConfig.getArchiveDir();
         
         // 优先读取app_code目录下的jar（如果appCode不为空）
         if (appCode != null && !appCode.trim().isEmpty()) {

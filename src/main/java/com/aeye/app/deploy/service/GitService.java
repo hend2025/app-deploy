@@ -1,6 +1,7 @@
 package com.aeye.app.deploy.service;
 
-import org.springframework.beans.factory.annotation.Value;
+import com.aeye.app.deploy.config.DirectoryConfig;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -13,9 +14,8 @@ import java.util.function.BiConsumer;
 @Service
 public class GitService {
 
-    /** 工作空间目录 */
-    @Value("${app.directory.workspace}")
-    private String workspaceDir;
+    @Autowired
+    private DirectoryConfig directoryConfig;
 
     /**
      * 拉取指定分支或tag的代码
@@ -39,7 +39,7 @@ public class GitService {
         String authUrl = buildAuthUrl(gitUrl, gitAcct, gitPwd);
         
         // 工作目录：workspace/appCode
-        File workDir = new File(workspaceDir, appCode);
+        File workDir = new File(directoryConfig.getWorkspaceDir(), appCode);
         
         if (workDir.exists() && new File(workDir, ".git").exists()) {
             // 已存在仓库，执行fetch和checkout

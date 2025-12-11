@@ -20,6 +20,11 @@ const routes = [
     path: '/deploy/logFiles',
     name: 'LogFiles',
     component: () => import('../views/LogFiles.vue')
+  },
+  {
+    path: '/deploy/fileBrowser',
+    name: 'FileBrowser',
+    component: () => import('../views/FileBrowser.vue')
   }
 ]
 

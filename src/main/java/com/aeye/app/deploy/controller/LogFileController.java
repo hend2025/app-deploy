@@ -1,8 +1,9 @@
 package com.aeye.app.deploy.controller;
 
+import com.aeye.app.deploy.config.DirectoryConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
@@ -33,8 +34,8 @@ public class LogFileController {
 
     private static final Logger logger = LoggerFactory.getLogger(LogFileController.class);
 
-    @Value("${app.directory.logs:/home/logs}")
-    private String logsDir;
+    @Autowired
+    private DirectoryConfig directoryConfig;
 
     /**
      * 获取应用列表（日志目录下的子目录）
@@ -43,7 +44,7 @@ public class LogFileController {
     public ResponseEntity<Map<String, Object>> getAppList() {
         Map<String, Object> response = new HashMap<>();
         try {
-            File logPath = new File(logsDir);
+            File logPath = new File(directoryConfig.getLogsDir());
             if (!logPath.exists() || !logPath.isDirectory()) {
                 response.put("success", true);
                 response.put("data", Collections.emptyList());
@@ -89,7 +90,7 @@ public class LogFileController {
                 return ResponseEntity.ok(response);
             }
 
-            Path appLogPath = Paths.get(logsDir, appCode);
+            Path appLogPath = Paths.get(directoryConfig.getLogsDir(), appCode);
             if (!Files.exists(appLogPath) || !Files.isDirectory(appLogPath)) {
                 response.put("success", true);
                 response.put("data", Collections.emptyList());
@@ -148,7 +149,7 @@ public class LogFileController {
                 return ResponseEntity.ok(response);
             }
 
-            Path filePath = Paths.get(logsDir, appCode, fileName);
+            Path filePath = Paths.get(directoryConfig.getLogsDir(), appCode, fileName);
             if (!Files.exists(filePath) || !Files.isRegularFile(filePath)) {
                 response.put("success", false);
                 response.put("message", "文件不存在");
@@ -206,7 +207,7 @@ public class LogFileController {
                 return ResponseEntity.badRequest().build();
             }
 
-            Path filePath = Paths.get(logsDir, appCode, fileName);
+            Path filePath = Paths.get(directoryConfig.getLogsDir(), appCode, fileName);
             if (!Files.exists(filePath) || !Files.isRegularFile(filePath)) {
                 return ResponseEntity.notFound().build();
             }
@@ -242,7 +243,7 @@ public class LogFileController {
                 return ResponseEntity.ok(response);
             }
 
-            Path filePath = Paths.get(logsDir, appCode, fileName);
+            Path filePath = Paths.get(directoryConfig.getLogsDir(), appCode, fileName);
             if (!Files.exists(filePath)) {
                 response.put("success", false);
                 response.put("message", "文件不存在");

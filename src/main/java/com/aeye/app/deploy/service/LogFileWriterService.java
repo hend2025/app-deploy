@@ -1,8 +1,10 @@
 package com.aeye.app.deploy.service;
 
+import com.aeye.app.deploy.config.DirectoryConfig;
 import com.aeye.app.deploy.model.AppLog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Service;
@@ -24,8 +26,8 @@ public class LogFileWriterService implements CommandLineRunner {
 
     private static final Logger logger = LoggerFactory.getLogger(LogFileWriterService.class);
 
-    @Value("${app.directory.logs:/home/logs}")
-    private String logsDir;
+    @Autowired
+    private DirectoryConfig directoryConfig;
 
     /** 单个日志文件最大大小（MB），默认20MB */
     @Value("${app.log.max-file-size-mb:20}")
@@ -90,14 +92,9 @@ public class LogFileWriterService implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
+        String logsDir = directoryConfig.getLogsDir();
         logger.info("日志文件写入服务启动，日志目录: {}，刷新阈值: {}，刷新间隔: {} 分钟，单文件最大: {}MB",
                 logsDir, flushSize, flushIntervalMinutes, maxFileSizeMb);
-        
-        // 确保日志根目录存在
-        Path logPath = Paths.get(logsDir);
-        if (!Files.exists(logPath)) {
-            Files.createDirectories(logPath);
-        }
         
         startWriterExecutor();
         startFlushScheduler();
@@ -270,7 +267,7 @@ public class LogFileWriterService implements CommandLineRunner {
             String safeAppName = extractSafeAppName(appCode);
             
             // 确保目录存在
-            Path logDir = Paths.get(logsDir, safeAppName);
+            Path logDir = Paths.get(directoryConfig.getLogsDir(), safeAppName);
             if (!Files.exists(logDir)) {
                 Files.createDirectories(logDir);
             }
@@ -475,7 +472,7 @@ public class LogFileWriterService implements CommandLineRunner {
             String safeVersion = version != null ? version.replaceAll("[/\\\\:*?\"<>|]", "_") : "unknown";
             
             // 确保目录存在
-            Path logDir = Paths.get(logsDir, safeAppName);
+            Path logDir = Paths.get(directoryConfig.getLogsDir(), safeAppName);
             try {
                 if (!Files.exists(logDir)) {
                     Files.createDirectories(logDir);

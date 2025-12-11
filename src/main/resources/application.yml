@@ -23,10 +23,7 @@ mybatis-plus:
   mapper-locations: classpath:mapper/*.xml
 
 app:
-  directory:
-    workspace: /home/aeye/workspace
-    archive: /home/aeye/archive
-    logs: /home/aeye/logs
+  home-directory: D:/home
   log:
     cache-size: 5000
     flush-size: 500

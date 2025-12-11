@@ -18,6 +18,7 @@
     <el-menu-item index="/deploy/appBuild">版本构建</el-menu-item>
     <el-menu-item index="/deploy/appDeploy">应用启动</el-menu-item>
     <el-menu-item index="/deploy/logFiles">日志文件</el-menu-item>
+    <el-menu-item index="/deploy/fileBrowser">文件浏览</el-menu-item>
   </el-menu>
 </template>
 

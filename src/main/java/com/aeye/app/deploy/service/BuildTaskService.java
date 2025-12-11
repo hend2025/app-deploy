@@ -1,5 +1,6 @@
 package com.aeye.app.deploy.service;
 
+import com.aeye.app.deploy.config.DirectoryConfig;
 import com.aeye.app.deploy.model.AppBuild;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,11 +40,8 @@ public class BuildTaskService {
     @Autowired
     private GitService gitService;
 
-    @Value("${app.directory.workspace}")
-    private String workspaceDir;
-
-    @Value("${app.directory.archive}")
-    private String archiveDir;
+    @Autowired
+    private DirectoryConfig directoryConfig;
 
     private final Map<String, Process> cmdMap = new ConcurrentHashMap<>();
     
@@ -153,7 +151,7 @@ public class BuildTaskService {
                         (level, msg) -> logBufferService.addLog(appCode, branchOrTag, level, msg, new Date())
                     );
                 } else {
-                    workDir = new File(workspaceDir, appCode).getAbsolutePath();
+                    workDir = new File(directoryConfig.getWorkspaceDir(), appCode).getAbsolutePath();
                     logBufferService.addLog(appCode, branchOrTag, "WARN", "未配置Git信息，跳过代码拉取", new Date());
                 }
 
@@ -271,7 +269,7 @@ public class BuildTaskService {
     private void archiveFiles(String appCode, String branchOrTag, String workDir, String archiveFiles,
                               java.util.function.BiConsumer<String, String> logConsumer) {
         // 创建归档目录：archiveDir/appCode/
-        File appArchivePath = new File(archiveDir, appCode);
+        File appArchivePath = new File(directoryConfig.getArchiveDir(), appCode);
         if (!appArchivePath.exists()) {
             appArchivePath.mkdirs();
         }

@@ -34,6 +34,10 @@ export default defineConfig({
         target: 'http://127.0.0.1:7080',
         changeOrigin: true
       },
+      '/deploy/fileBrowser': {
+        target: 'http://127.0.0.1:7080',
+        changeOrigin: true
+      },
       '/deploy/ws': {
         target: 'ws://127.0.0.1:7080',
         ws: true,
