@@ -169,7 +169,8 @@ public class BuildTaskService {
                 if (isWindows()) {
                     processBuilder.command("cmd", "/c", tempScriptFile.getAbsolutePath(), branchOrTag);
                 } else {
-                    processBuilder.command("bash", tempScriptFile.getAbsolutePath(), branchOrTag);
+                    // 使用登录shell (-l) 以加载 .bash_profile/.bashrc 中的环境变量（如nvm）
+                    processBuilder.command("bash", "-l", tempScriptFile.getAbsolutePath(), branchOrTag);
                 }
                 
                 // 设置工作目录
