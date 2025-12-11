@@ -97,8 +97,13 @@ public class FileBrowserController {
             SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
             List<Map<String, Object>> items = new ArrayList<>();
 
+            // 判断是否为根目录（用于过滤workspace目录）
+            final boolean isRootDir = path == null || path.isEmpty();
+            
             try (Stream<Path> stream = Files.list(targetPath)) {
                 items = stream
+                // 根目录下隐藏workspace目录
+                .filter(p -> !(isRootDir && p.toFile().isDirectory() && "workspace".equals(p.toFile().getName())))
                 .limit(MAX_LIST_FILES)  // 限制最大文件数，防止大目录导致性能问题
                 .map(p -> {
                     Map<String, Object> item = new HashMap<>();

@@ -9,6 +9,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Date;
 import java.util.List;
 
+/**
+ * 应用部署服务
+ * 提供应用部署配置的CRUD操作
+ *
+ * @author aeye
+ * @since 1.0.0
+ */
 @Service
 public class AppDeployService {
 

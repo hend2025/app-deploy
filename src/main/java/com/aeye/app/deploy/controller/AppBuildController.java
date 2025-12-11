@@ -13,6 +13,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 应用构建控制器
+ * 
+ * 提供应用构建配置的管理和构建任务的控制，包括：
+ * - 版本配置的增删改查
+ * - 启动/停止构建任务
+ * - 构建参数验证
+ *
+ * @author aeye
+ * @since 1.0.0
+ */
 @RestController
 @RequestMapping("/appBuild")
 public class AppBuildController {
@@ -39,6 +50,13 @@ public class AppBuildController {
         return branchOrTag != null && branchOrTag.matches("^[a-zA-Z0-9_\\-./]+$");
     }
 
+    /**
+     * 搜索版本列表
+     * 支持按应用名称模糊搜索，返回结果中Git密码会被掩码处理
+     *
+     * @param appName 应用名称（可选，支持模糊匹配）
+     * @return 版本列表
+     */
     @GetMapping("/search")
     public ResponseEntity<Map<String, Object>> searchVersions(@RequestParam(required = false) String appName) {
         try {
@@ -70,6 +88,13 @@ public class AppBuildController {
         }
     }
 
+    /**
+     * 保存版本配置
+     * 新增或更新版本配置信息，如果密码为掩码则保留原密码
+     *
+     * @param verInfo 版本信息
+     * @return 保存结果
+     */
     @PostMapping("/save")
     public ResponseEntity<Map<String, Object>> saveVersion(@RequestBody AppBuild verInfo) {
         try {
@@ -111,6 +136,12 @@ public class AppBuildController {
         }
     }
 
+    /**
+     * 删除版本配置
+     *
+     * @param request 请求参数：appCode-应用编码
+     * @return 删除结果
+     */
     @PostMapping("/delete")
     public ResponseEntity<Map<String, Object>> deleteVersion(@RequestBody Map<String, String> request) {
         try {
@@ -137,6 +168,13 @@ public class AppBuildController {
         }
     }
 
+    /**
+     * 启动构建任务
+     * 异步执行构建，立即返回任务启动状态
+     *
+     * @param request 请求参数：appCode-应用编码，branchOrTag-分支或Tag名
+     * @return 启动结果
+     */
     @PostMapping("/build")
     public ResponseEntity<Map<String, Object>> startBuild(@RequestBody Map<String, String> request) {
         try {
@@ -208,6 +246,12 @@ public class AppBuildController {
         }
     }
 
+    /**
+     * 停止构建任务
+     *
+     * @param request 请求参数：appCode-应用编码
+     * @return 停止结果
+     */
     @PostMapping("/stop")
     public ResponseEntity<Map<String, Object>> stopBuild(@RequestBody Map<String, String> request) {
         try {

@@ -23,6 +23,21 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 构建任务服务
+ * 
+ * 负责应用构建任务的执行和管理，包括：
+ * - 启动构建任务（异步执行）
+ * - 停止构建任务
+ * - Git代码拉取
+ * - 构建脚本执行
+ * - 构建产物归档
+ * 
+ * 支持并发构建控制和构建日志实时输出
+ *
+ * @author aeye
+ * @since 1.0.0
+ */
 @Service
 public class BuildTaskService {
     
@@ -50,6 +65,10 @@ public class BuildTaskService {
     
     private ExecutorService executorService;
     
+    /**
+     * 服务初始化
+     * 创建构建任务线程池
+     */
     @javax.annotation.PostConstruct
     public void init() {
         executorService = Executors.newFixedThreadPool(maxConcurrentBuilds, r -> {
@@ -60,10 +79,26 @@ public class BuildTaskService {
         logger.info("BuildTaskService初始化完成，最大并发构建数: {}", maxConcurrentBuilds);
     }
 
+    /**
+     * 判断当前操作系统是否为Windows
+     *
+     * @return true-Windows系统，false-其他系统
+     */
     private boolean isWindows() {
         return System.getProperty("os.name").toLowerCase().contains("win");
     }
 
+    /**
+     * 创建临时构建脚本文件
+     * Windows系统创建.cmd文件，Linux系统创建.sh文件
+     * 自动处理换行符和编码问题
+     *
+     * @param appCode       应用编码
+     * @param scriptContent 脚本内容
+     * @param targetVersion 目标版本
+     * @return 临时脚本文件
+     * @throws IOException 文件创建失败时抛出
+     */
     private File createTempScript(String appCode, String scriptContent, String targetVersion) throws IOException {
         String processedContent = scriptContent;
 
@@ -93,6 +128,18 @@ public class BuildTaskService {
         return scriptFile;
     }
 
+    /**
+     * 启动构建任务
+     * 
+     * 异步执行构建流程：
+     * 1. 拉取Git代码（如果配置了Git信息）
+     * 2. 执行构建脚本
+     * 3. 归档构建产物（如果配置了归档文件）
+     *
+     * @param appVersion  应用版本配置
+     * @param branchOrTag 分支名或Tag名
+     * @throws IllegalStateException 构建任务已在运行或并发数达到上限时抛出
+     */
     public void startBuild(AppBuild appVersion, String branchOrTag) {
         String appCode = appVersion.getAppCode();
         
@@ -266,6 +313,18 @@ public class BuildTaskService {
     }
 
 
+    /**
+     * 归档构建产物
+     * 
+     * 支持glob模式匹配文件，将匹配的文件复制到归档目录
+     * 归档目录结构：archiveDir/appCode/文件名
+     *
+     * @param appCode     应用编码
+     * @param branchOrTag 分支或Tag名称（用于文件名替换）
+     * @param workDir     工作目录
+     * @param archiveFiles 归档文件配置（逗号分隔，支持glob模式）
+     * @param logConsumer 日志回调函数
+     */
     private void archiveFiles(String appCode, String branchOrTag, String workDir, String archiveFiles,
                               java.util.function.BiConsumer<String, String> logConsumer) {
         // 创建归档目录：archiveDir/appCode/
@@ -327,8 +386,8 @@ public class BuildTaskService {
     
     /**
      * 归档单个文件
-     * <p>
-     * 复制文件到归档目录，并将文件名中的版本号替换为分支/Tag名称。
+     * 
+     * 复制文件到归档目录，并将文件名中的版本号替换为分支/Tag名称
      * 例如：app-2.0.9-SNAPSHOT.jar -> app-v2025.93.jar
      *
      * @param sourceFile  源文件
@@ -353,9 +412,9 @@ public class BuildTaskService {
     
     /**
      * 替换文件名中的版本号
-     * <p>
-     * 使用正则匹配版本号模式（如 2.0.9-SNAPSHOT），替换为分支/Tag名称。
-     * 保留版本号之前的名称部分。
+     * 
+     * 使用正则匹配版本号模式（如 2.0.9-SNAPSHOT），替换为分支/Tag名称
+     * 保留版本号之前的名称部分
      *
      * @param fileName    原文件名
      * @param branchOrTag 分支或Tag名称
@@ -393,6 +452,10 @@ public class BuildTaskService {
     
     /**
      * 解析日志级别
+     * 根据日志内容中的关键字判断日志级别
+     *
+     * @param logContent 日志内容
+     * @return 日志级别：ERROR/WARN/DEBUG/INFO
      */
     private String parseLogLevel(String logContent) {
         if (logContent == null) {
@@ -410,6 +473,12 @@ public class BuildTaskService {
     }
 
 
+    /**
+     * 停止构建任务
+     *
+     * @param appCode 应用编码
+     * @return true-停止成功，false-停止失败或任务不存在
+     */
     public boolean stopBuild(String appCode) {
         Process process = cmdMap.get(appCode);
         if (process != null && process.isAlive()) {
@@ -439,7 +508,6 @@ public class BuildTaskService {
 
     /**
      * 服务销毁时的清理操作
-     * <p>
      * 停止所有正在运行的构建任务，优雅关闭线程池
      */
     @PreDestroy

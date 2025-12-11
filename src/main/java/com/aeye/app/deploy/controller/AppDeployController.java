@@ -14,6 +14,17 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 应用部署控制器
+ * 
+ * 提供应用部署配置的管理和运行控制，包括：
+ * - 应用配置的增删改查
+ * - 启动/停止应用进程
+ * - 实时进程状态检测（带缓存优化）
+ *
+ * @author aeye
+ * @since 1.0.0
+ */
 @RestController
 @RequestMapping("/appDeploy")
 public class AppDeployController {
@@ -34,7 +45,6 @@ public class AppDeployController {
     
     /**
      * 进程信息缓存内部类
-     * <p>
      * 缓存进程ID和时间戳，支持过期检测
      */
     private static class CachedProcessInfo {
@@ -57,7 +67,6 @@ public class AppDeployController {
 
     /**
      * 获取应用列表
-     * <p>
      * 返回所有应用的配置信息和实时运行状态（通过检测系统进程获取）
      *
      * @param appName 应用名称过滤条件（可选，支持模糊匹配）
@@ -132,7 +141,6 @@ public class AppDeployController {
 
     /**
      * 启动应用
-     * <p>
      * 异步启动指定版本的JAR应用，支持自定义JVM参数
      *
      * @param request 请求参数：svcCode-微服务名，version-版本号，params-JVM参数
@@ -194,7 +202,6 @@ public class AppDeployController {
 
     /**
      * 保存应用配置
-     * <p>
      * 新增或更新应用配置信息
      *
      * @param appInfo 应用信息
@@ -261,7 +268,6 @@ public class AppDeployController {
 
     /**
      * 停止应用
-     * <p>
      * 通过进程ID强制终止应用进程
      *
      * @param request 请求参数：svcCode-微服务名，pid-进程ID

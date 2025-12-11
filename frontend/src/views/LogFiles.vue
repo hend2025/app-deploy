@@ -1,3 +1,10 @@
+<!--
+  日志文件浏览页面
+  功能：
+  - 浏览日志目录和文件
+  - 查看日志文件内容（支持分页加载）
+  - 下载和删除日志文件
+-->
 <template>
   <div class="page-container">
     <el-card class="log-browser">
@@ -109,6 +116,10 @@
 </template>
 
 <script>
+/**
+ * 日志文件浏览页面组件
+ * 提供日志文件的浏览、查看和下载功能
+ */
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { Folder, FolderOpened, Document, Refresh, Download, Delete, DocumentCopy, HomeFilled, DArrowLeft, DArrowRight } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'

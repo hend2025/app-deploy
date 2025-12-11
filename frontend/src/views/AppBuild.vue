@@ -1,3 +1,10 @@
+<!--
+  应用构建页面
+  功能：
+  - 版本配置的增删改查
+  - 启动/停止构建任务
+  - 查看构建日志
+-->
 <template>
   <div class="page-container">
     <el-card>
@@ -151,6 +158,10 @@
 </template>
 
 <script>
+/**
+ * 应用构建页面组件
+ * 提供版本配置管理和构建任务控制功能
+ */
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { verBuildApi, logApi } from '../api'
 import LogModal from '../components/LogModal.vue'

@@ -1,3 +1,11 @@
+<!--
+  日志模态框组件
+  功能：
+  - 全屏显示应用日志
+  - WebSocket 实时推送日志
+  - 支持断线自动重连
+  - 支持 Ctrl+A 全选日志
+-->
 <template>
   <el-dialog
     v-model="visible"
@@ -20,13 +28,17 @@
       </div>
     </template>
     <div ref="logContent" class="log-content" tabindex="0" @keydown.ctrl.a.prevent="selectAllLogs">
-      <div v-for="(log, index) in logs" :key="index" class="log-line" :class="'log-' + (log.logLevel || 'info').toLowerCase()">{{ log.logTime }} {{ escapeHtml(log.logContent) }}</div>
+      <div v-for="(log, index) in logs" :key="index" class="log-line" :class="'log-' + (log.logLevel || 'info').toLowerCase()">{{ escapeHtml(log.logContent) }}</div>
       <div v-if="logs.length === 0" class="empty-tip">暂无日志</div>
     </div>
   </el-dialog>
 </template>
 
 <script>
+/**
+ * 日志模态框组件
+ * 提供实时日志查看功能，支持 WebSocket 推送和断线重连
+ */
 import { ref, onUnmounted, onMounted, nextTick } from 'vue'
 import { logApi } from '../api'
 

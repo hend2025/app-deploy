@@ -11,6 +11,18 @@ import java.nio.charset.StandardCharsets;
 import java.util.function.BiConsumer;
 
 
+/**
+ * Git 代码管理服务
+ * 
+ * 提供 Git 仓库的克隆和更新功能，支持：
+ * - HTTP/HTTPS 协议的 Git 仓库
+ * - 用户名密码认证
+ * - 分支和 Tag 的切换
+ * 
+ * 安全特性：
+ * - 分支/Tag 名称校验，防止命令注入
+ * - 日志中自动隐藏密码信息
+ */
 @Service
 public class GitService {
 
@@ -18,14 +30,22 @@ public class GitService {
     private DirectoryConfig directoryConfig;
 
     /**
-     * 拉取指定分支或tag的代码
-     * @param appCode 应用编码
-     * @param gitUrl Git仓库地址
-     * @param gitAcct Git账号
-     * @param gitPwd Git密码
-     * @param branchOrTag 分支或tag名称
-     * @param logConsumer 日志回调
-     * @return 工作目录路径
+     * 拉取指定分支或 Tag 的代码
+     * 
+     * 执行流程：
+     * 1. 验证分支/Tag 名称合法性
+     * 2. 构建带认证信息的 Git URL
+     * 3. 如果本地已有仓库，执行 fetch + checkout（分支还会 pull）
+     * 4. 如果本地无仓库，执行 clone
+     *
+     * @param appCode     应用编码，用于确定工作目录名
+     * @param gitUrl      Git 仓库地址
+     * @param gitAcct     Git 账号（可为空）
+     * @param gitPwd      Git 密码（可为空）
+     * @param branchOrTag 分支或 Tag 名称
+     * @param logConsumer 日志回调函数，参数为 (级别, 消息)
+     * @return 工作目录的绝对路径
+     * @throws Exception 如果 Git 操作失败
      */
     public String cloneOrPull(String appCode, String gitUrl, String gitAcct, String gitPwd, 
                               String branchOrTag, BiConsumer<String, String> logConsumer) throws Exception {

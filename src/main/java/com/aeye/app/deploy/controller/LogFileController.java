@@ -25,8 +25,16 @@ import java.util.stream.Stream;
 
 /**
  * 日志文件管理控制器
- * <p>
- * 提供日志文件的浏览、查看和下载功能
+ * 
+ * 提供日志文件的浏览、查看和下载功能，包括：
+ * - 获取应用列表（日志目录下的子目录）
+ * - 获取指定应用的日志文件列表
+ * - 读取日志文件内容（支持分页加载）
+ * - 下载日志文件
+ * - 删除日志文件
+ *
+ * @author aeye
+ * @since 1.0.0
  */
 @RestController
 @RequestMapping("/logFiles")
@@ -262,19 +270,45 @@ public class LogFileController {
         }
     }
 
+    /**
+     * 验证应用编码格式
+     * 只允许字母、数字、下划线和横线，防止路径遍历攻击
+     *
+     * @param appCode 应用编码
+     * @return true-格式有效，false-格式无效
+     */
     private boolean isValidAppCode(String appCode) {
         return appCode != null && appCode.matches("^[a-zA-Z0-9_\\-]+$");
     }
 
+    /**
+     * 验证文件名格式
+     * 只允许.log后缀的文件，防止任意文件访问
+     *
+     * @param fileName 文件名
+     * @return true-格式有效，false-格式无效
+     */
     private boolean isValidFileName(String fileName) {
         return fileName != null && fileName.matches("^[a-zA-Z0-9_\\-.]+\\.log$");
     }
 
+    /**
+     * 统计目录下的日志文件数量
+     *
+     * @param dir 目录
+     * @return 日志文件数量
+     */
     private int countLogFiles(File dir) {
         File[] files = dir.listFiles((d, name) -> name.endsWith(".log"));
         return files != null ? files.length : 0;
     }
 
+    /**
+     * 格式化文件大小为可读字符串
+     *
+     * @param size 文件大小（字节）
+     * @return 格式化后的字符串，如：1.5 MB
+     */
     private String formatFileSize(long size) {
         if (size < 1024) return size + " B";
         if (size < 1024 * 1024) return String.format("%.1f KB", size / 1024.0);

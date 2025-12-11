@@ -1,3 +1,10 @@
+<!--
+  应用部署页面
+  功能：
+  - 微服务配置的增删改查
+  - 启动/停止应用进程
+  - 查看应用日志
+-->
 <template>
   <div class="page-container">
     <el-card>
@@ -137,6 +144,10 @@
 </template>
 
 <script>
+/**
+ * 应用部署页面组件
+ * 提供微服务配置管理和运行控制功能
+ */
 import { ref, computed, onMounted } from 'vue'
 import { appMgtApi, verBuildApi } from '../api'
 import LogModal from '../components/LogModal.vue'

@@ -13,6 +13,18 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * 日志缓冲服务
+ * 
+ * 提供应用日志的内存缓冲功能，支持：
+ * - 按应用隔离的日志缓冲区
+ * - 滚动存储（超过最大缓存大小时自动删除旧日志）
+ * - 增量读取（基于序号）
+ * - 异步写入文件和WebSocket推送
+ *
+ * @author aeye
+ * @since 1.0.0
+ */
 @Service
 public class LogBufferService implements CommandLineRunner {
 
@@ -55,6 +67,16 @@ public class LogBufferService implements CommandLineRunner {
         logger.info("日志缓冲服务启动，每应用缓存大小: {}", maxBufferSizePerApp);
     }
 
+    /**
+     * 添加日志到缓冲区
+     * 同时触发文件写入和WebSocket推送
+     *
+     * @param appCode    应用编码
+     * @param version    版本号
+     * @param logLevel   日志级别
+     * @param logContent 日志内容
+     * @param logTime    日志时间
+     */
     public void addLog(String appCode, String version, String logLevel, String logContent, Date logTime) {
         AppLogBuffer buffer = getOrCreateBuffer(appCode);
         AppLog log = createAppLog(appCode, version, logLevel, logContent, logTime);
@@ -79,6 +101,10 @@ public class LogBufferService implements CommandLineRunner {
         logWebSocketHandler.pushLog(log);
     }
 
+    /**
+     * 创建日志对象
+     * 自动分配全局递增序号
+     */
     private AppLog createAppLog(String appCode, String version, String logLevel, String logContent, Date logTime) {
         AppLog log = new AppLog();
         log.setAppCode(appCode);
@@ -90,6 +116,15 @@ public class LogBufferService implements CommandLineRunner {
         return log;
     }
 
+    /**
+     * 增量获取日志
+     * 返回序号大于afterSeq的日志列表
+     *
+     * @param appCode  应用编码
+     * @param afterSeq 起始序号
+     * @param limit    返回数量限制
+     * @return 日志列表
+     */
     public List<AppLog> getLogsIncremental(String appCode, long afterSeq, int limit) {
         List<AppLog> result = new ArrayList<>();
 
@@ -129,7 +164,6 @@ public class LogBufferService implements CommandLineRunner {
 
     /**
      * 清除指定应用的缓冲区
-     * <p>
      * 用于构建开始前清除旧日志，避免显示上次构建的日志
      *
      * @param appCode 应用编码
@@ -143,7 +177,6 @@ public class LogBufferService implements CommandLineRunner {
 
     /**
      * 开始新的日志会话（用于构建或运行开始时）
-     * <p>
      * 清除内存缓冲区并通知文件写入服务开始新会话，递增运行/打包次数
      *
      * @param appCode 应用编码

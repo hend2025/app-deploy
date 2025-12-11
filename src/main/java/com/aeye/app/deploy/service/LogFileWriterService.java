@@ -21,6 +21,18 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
+/**
+ * 日志文件写入服务
+ * 
+ * 负责将应用日志异步写入文件系统，支持：
+ * - 按应用隔离的日志缓冲区
+ * - 日志文件自动滚动（按大小）
+ * - 定时刷新和阈值触发刷新
+ * - 文件命名规则：appCode_version_x-y.log（x为运行次数，y为文件序号）
+ *
+ * @author aeye
+ * @since 1.0.0
+ */
 @Service
 public class LogFileWriterService implements CommandLineRunner {
 
@@ -41,8 +53,7 @@ public class LogFileWriterService implements CommandLineRunner {
 
     /**
      * 日志缓冲区内部类
-     * <p>
-     * 每个应用+日志类型+版本组合独立的缓冲区
+     * 每个应用独立的缓冲区，包含日志队列和文件状态
      */
     private static class LogFileBuffer {
         /** 日志队列 */
@@ -133,8 +144,7 @@ public class LogFileWriterService implements CommandLineRunner {
 
     /**
      * 添加日志到缓冲区
-     * <p>
-     * 日志会被添加到对应应用的缓冲区，当待写入日志数达到阈值时，自动触发文件写入。
+     * 日志会被添加到对应应用的缓冲区，当待写入日志数达到阈值时自动触发文件写入
      *
      * @param appCode    应用编码
      * @param version    版本号
@@ -224,7 +234,6 @@ public class LogFileWriterService implements CommandLineRunner {
 
     /**
      * 从appCode中提取安全的目录名和文件名前缀
-     * <p>
      * 如果appCode是完整路径（如/aeye/logs/xxx.log），则提取文件名部分并去掉扩展名
      * 
      * @param appCode 应用编码或完整路径
@@ -309,7 +318,7 @@ public class LogFileWriterService implements CommandLineRunner {
                     new OutputStreamWriter(new FileOutputStream(buffer.currentFile, true), 
                                            StandardCharsets.UTF_8))) {
                 for (AppLog log : logs) {
-                    String line = formatLogLine(log);
+                    String line = log.getLogContent();
                     writer.write(line);
                     writer.newLine();
                     buffer.currentFileSize += line.getBytes(StandardCharsets.UTF_8).length + 1;
@@ -334,9 +343,11 @@ public class LogFileWriterService implements CommandLineRunner {
 
     /**
      * 查找当前最大运行次数
-     * <p>
      * 用于startNewSession时确定下一个运行次数
      * 
+     * @param logDir  日志目录
+     * @param appCode 应用编码
+     * @param version 版本号
      * @return 最大运行次数，如果没有文件则返回0
      */
     private int findMaxRunCount(Path logDir, String appCode, String version) {
@@ -370,9 +381,11 @@ public class LogFileWriterService implements CommandLineRunner {
 
     /**
      * 查找下一个运行次数和文件序号
-     * <p>
      * 文件命名规则: appCode_version_x-y.log
      * 
+     * @param logDir  日志目录
+     * @param appCode 应用编码
+     * @param version 版本号
      * @return int[]{runCount, fileSeq}
      */
     private int[] findNextRunAndFileSeq(Path logDir, String appCode, String version) {
@@ -452,7 +465,6 @@ public class LogFileWriterService implements CommandLineRunner {
 
     /**
      * 开始新的运行/打包会话
-     * <p>
      * 调用此方法后，下次写入日志时会递增运行次数（x），文件序号（y）重置为1
      *
      * @param appCode 应用编码

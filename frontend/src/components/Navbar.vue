@@ -1,3 +1,10 @@
+<!--
+  导航栏组件
+  功能：
+  - 显示系统标题
+  - 提供页面导航菜单
+  - 高亮当前激活的菜单项
+-->
 <template>
   <el-menu
     mode="horizontal"
@@ -17,12 +24,18 @@
     <!-- 导航菜单项 -->
     <el-menu-item index="/deploy/appBuild">版本构建</el-menu-item>
     <el-menu-item index="/deploy/appDeploy">应用启动</el-menu-item>
+    <!--
     <el-menu-item index="/deploy/logFiles">日志文件</el-menu-item>
+    -->
     <el-menu-item index="/deploy/fileBrowser">文件浏览</el-menu-item>
   </el-menu>
 </template>
 
 <script>
+/**
+ * 导航栏组件
+ * 根据当前路由自动高亮对应的菜单项
+ */
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 

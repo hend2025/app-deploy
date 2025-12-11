@@ -22,6 +22,20 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * JAR 应用进程管理服务
+ * 
+ * 提供 JAR 应用的启动功能，包括：
+ * - 从归档目录查找指定版本的 JAR 文件
+ * - 复制 JAR 到运行目录
+ * - 异步启动 Java 进程
+ * - 实时采集进程输出日志
+ * 
+ * 支持多种目录结构：
+ * - archive/appCode/svcCode-version.jar
+ * - archive/svcCode/svcCode-version.jar
+ * - archive/svcCode-version.jar（兼容旧结构）
+ */
 @Service
 public class JarProcessService {
     
@@ -30,7 +44,7 @@ public class JarProcessService {
     @Autowired
     private DirectoryConfig directoryConfig;
     
-    /** 最大并发启动任务数 */
+    /** 最大并发启动任务数，防止资源耗尽 */
     @Value("${app.process.max-concurrent-startups:10}")
     private int maxConcurrentStartups;
     
@@ -60,20 +74,18 @@ public class JarProcessService {
     }
 
     /**
-     * 启动JAR应用
-     * <p>
+     * 启动 JAR 应用
+     * 
      * 执行流程：
-     * <ol>
-     *   <li>优先读取app_code目录下的jar，找不到再读取archive目录下的jar</li>
-     *   <li>复制指定版本JAR到运行位置（svcCode.jar）</li>
-     *   <li>构建启动命令（Java + JVM参数 + JAR）</li>
-     *   <li>异步启动进程并采集日志</li>
-     * </ol>
+     * 1. 按优先级查找 JAR 文件（appCode目录 - svcCode目录 - 根目录）
+     * 2. 复制指定版本 JAR 到运行位置（svcCode.jar）
+     * 3. 构建启动命令（Java + JVM参数 + JAR）
+     * 4. 异步启动进程并采集日志
      *
      * @param appDeploy 应用部署信息
      * @param version   版本号
-     * @param params    JVM启动参数（多行，每行一个参数）
-     * @throws Exception 如果JAR文件不存在或启动失败
+     * @param params    JVM 启动参数（多行文本，每行一个参数）
+     * @throws Exception 如果 JAR 文件不存在或启动失败
      */
     public void startJarApp(AppDeploy appDeploy, String version, String params) throws Exception {
         String svcCode = appDeploy.getSvcCode();
@@ -201,8 +213,13 @@ public class JarProcessService {
     
     /**
      * 读取进程输出并写入内存缓冲
-     * <p>
-     * 使用非守护线程确保进程结束后日志能完整读取
+     * 
+     * 使用非守护线程确保进程结束后日志能完整读取。
+     * 日志会实时写入 LogBufferService，支持前端实时查看。
+     *
+     * @param process 进程对象
+     * @param appCode 应用编码
+     * @param version 版本号
      */
     private void readProcessOutput(Process process, String appCode, String version) {
         Thread outputReader = new Thread(() -> {
@@ -266,8 +283,9 @@ public class JarProcessService {
     
     /**
      * 服务销毁时的清理操作
-     * <p>
-     * 优雅关闭线程池，等待正在执行的启动任务完成
+     * 
+     * 优雅关闭线程池，最多等待 10 秒让正在执行的任务完成。
+     * 超时后强制关闭线程池。
      */
     @PreDestroy
     public void shutdown() {

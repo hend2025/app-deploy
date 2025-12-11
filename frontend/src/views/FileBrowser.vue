@@ -1,11 +1,23 @@
+<!--
+  文件浏览器页面
+  
+  功能：
+  - 浏览 home-directory 目录下的文件和文件夹
+  - 双击目录进入，双击文本文件预览内容
+  - 支持 Ctrl+点击多选文件
+  - 支持单文件和多文件逐个下载（不支持下载目录）
+  - 文本文件预览支持分块加载大文件
+  - ESC 键关闭预览窗口
+-->
 <template>
   <div class="page-container">
     <el-card class="file-browser">
-      <!-- 工具栏 -->
+      <!-- 工具栏：导航按钮、路径面包屑、下载按钮 -->
       <div class="toolbar">
         <div class="path-nav">
           <el-button size="small" :icon="Back" @click="goUp" :disabled="!currentPath" title="返回上级" />
           <el-button size="small" :icon="Refresh" @click="refresh" title="刷新" />
+          <!-- 路径面包屑导航，点击可跳转到对应目录 -->
           <div class="breadcrumb-wrapper">
             <el-breadcrumb separator="/">
               <el-breadcrumb-item @click="goToPath('')" class="clickable">
@@ -22,6 +34,7 @@
             </el-breadcrumb>
           </div>
         </div>
+        <!-- 批量下载按钮，选中文件后显示 -->
         <div class="toolbar-actions">
           <el-button 
             v-if="selectedFiles.length > 0" 
@@ -36,7 +49,7 @@
 
       <!-- 文件列表区域 -->
       <div class="file-area" v-loading="loading">
-        <!-- 列表头 -->
+        <!-- 列表头：全选复选框、列标题 -->
         <div class="file-header">
           <span class="col-checkbox">
             <el-checkbox 
@@ -50,9 +63,9 @@
           <span class="col-size">大小</span>
         </div>
 
-        <!-- 文件列表 -->
+        <!-- 文件列表内容 -->
         <div class="file-list">
-          <!-- 返回上级 -->
+          <!-- 返回上级目录项，双击返回上级 -->
           <div v-if="currentPath" class="file-row" @dblclick="goUp">
             <span class="col-checkbox"></span>
             <span class="col-name">
@@ -63,7 +76,8 @@
             <span class="col-size"></span>
           </div>
 
-          <!-- 文件/目录列表 -->
+          <!-- 文件/目录列表项 -->
+          <!-- 单击选中，Ctrl+单击多选，双击打开 -->
           <div 
             v-for="item in fileList" 
             :key="item.name"
@@ -90,7 +104,7 @@
             <span class="col-size">{{ item.sizeText }}</span>
           </div>
 
-          <!-- 空状态 -->
+          <!-- 空目录提示 -->
           <div v-if="fileList.length === 0 && !loading" class="empty-state">
             <el-icon :size="48"><FolderOpened /></el-icon>
             <p>此文件夹为空</p>
@@ -98,16 +112,17 @@
         </div>
       </div>
 
-      <!-- 状态栏 -->
+      <!-- 状态栏：显示文件数量和选中数量 -->
       <div class="status-bar">
         <span>{{ fileList.length }} 个项目</span>
         <span v-if="selectedFiles.length > 0">，已选择 {{ selectedFiles.length }} 项</span>
       </div>
     </el-card>
 
-    <!-- 文件预览覆盖层 -->
+    <!-- 文件预览覆盖层，点击遮罩关闭 -->
     <div v-if="previewVisible" class="preview-overlay" @click.self="closePreview">
       <div class="preview-panel" v-loading="loadingContent">
+        <!-- 预览头部：文件名、大小、操作按钮 -->
         <div class="preview-header">
           <span class="preview-title">{{ previewFile?.name }}</span>
           <span class="preview-size">{{ previewFile?.sizeText }}</span>
@@ -120,6 +135,7 @@
             </el-button>
           </div>
         </div>
+        <!-- 预览内容区，滚动到底部自动加载更多 -->
         <div class="preview-body">
           <textarea 
             ref="previewRef"
@@ -135,6 +151,11 @@
 </template>
 
 <script>
+/**
+ * 文件浏览器组件
+ * 
+ * 提供类似 Windows 资源管理器的文件浏览体验
+ */
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Folder, FolderOpened, Document, Refresh, Download, HomeFilled, Back, Close } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -144,33 +165,45 @@ export default {
   name: 'FileBrowser',
   components: { Folder, FolderOpened, Document, Refresh, Download, HomeFilled, Back, Close },
   setup() {
-    const previewRef = ref(null)
-    const loading = ref(false)
-    const loadingContent = ref(false)
-    const fileList = ref([])
-    const currentPath = ref('')
-    const selectedFiles = ref([])
-    const previewVisible = ref(false)
-    const previewFile = ref(null)
-    const previewFilePath = ref('')
-    const fileContent = ref('')
-    const currentOffset = ref(0)
-    const hasMore = ref(false)
-    const CHUNK_SIZE = 102400
+    // ========== 响应式状态 ==========
+    const previewRef = ref(null)           // 预览文本框引用
+    const loading = ref(false)             // 目录加载状态
+    const loadingContent = ref(false)      // 文件内容加载状态
+    const fileList = ref([])               // 当前目录文件列表
+    const currentPath = ref('')            // 当前路径（相对于 home-directory）
+    const selectedFiles = ref([])          // 已选中的文件列表
+    const previewVisible = ref(false)      // 预览窗口是否可见
+    const previewFile = ref(null)          // 当前预览的文件信息
+    const previewFilePath = ref('')        // 当前预览文件的完整路径
+    const fileContent = ref('')            // 预览文件内容
+    const currentOffset = ref(0)           // 文件读取偏移量
+    const hasMore = ref(false)             // 是否还有更多内容
+    const CHUNK_SIZE = 102400              // 每次加载的字节数（100KB）
 
+    // ========== 计算属性 ==========
+    
+    /** 路径分段数组，用于面包屑导航 */
     const pathSegments = computed(() => {
       if (!currentPath.value) return []
       return currentPath.value.split('/').filter(s => s)
     })
 
+    /** 是否全选 */
     const isAllSelected = computed(() => {
       return fileList.value.length > 0 && selectedFiles.value.length === fileList.value.length
     })
 
+    /** 是否部分选中（用于复选框半选状态） */
     const isIndeterminate = computed(() => {
       return selectedFiles.value.length > 0 && selectedFiles.value.length < fileList.value.length
     })
 
+    // ========== 目录操作方法 ==========
+
+    /**
+     * 加载目录内容
+     * @param {string} path - 相对路径，空字符串表示根目录
+     */
     const loadDirectory = async (path = '') => {
       loading.value = true
       try {
@@ -178,7 +211,7 @@ export default {
         if (res.success) {
           fileList.value = res.data
           currentPath.value = path
-          selectedFiles.value = []
+          selectedFiles.value = []  // 切换目录时清空选择
         } else {
           ElMessage.error(res.message || '加载目录失败')
         }
@@ -189,16 +222,24 @@ export default {
       }
     }
 
+    /** 跳转到指定路径 */
     const goToPath = (path) => loadDirectory(path)
 
+    /** 返回上级目录 */
     const goUp = () => {
       const segments = currentPath.value.split('/').filter(s => s)
       segments.pop()
       loadDirectory(segments.join('/'))
     }
 
+    /** 刷新当前目录 */
     const refresh = () => loadDirectory(currentPath.value)
 
+    /**
+     * 打开文件或目录
+     * - 目录：进入该目录
+     * - 文本文件：打开预览
+     */
     const openItem = (item) => {
       if (item.isDirectory) {
         const newPath = currentPath.value ? `${currentPath.value}/${item.name}` : item.name
@@ -208,6 +249,13 @@ export default {
       }
     }
 
+    // ========== 选择操作方法 ==========
+
+    /**
+     * 选择文件项
+     * - 普通点击：单选
+     * - Ctrl+点击：切换选中状态（多选）
+     */
     const selectItem = (item, event) => {
       if (event.ctrlKey) {
         toggleSelect(item)
@@ -216,6 +264,7 @@ export default {
       }
     }
 
+    /** 切换单个文件的选中状态 */
     const toggleSelect = (item) => {
       const index = selectedFiles.value.findIndex(f => f.name === item.name)
       if (index >= 0) {
@@ -225,12 +274,20 @@ export default {
       }
     }
 
+    /** 全选/取消全选 */
     const toggleSelectAll = (val) => {
       selectedFiles.value = val ? [...fileList.value] : []
     }
 
+    /** 判断文件是否被选中 */
     const isSelected = (item) => selectedFiles.value.some(f => f.name === item.name)
 
+    // ========== 预览操作方法 ==========
+
+    /**
+     * 打开文件预览
+     * @param {Object} file - 文件信息对象
+     */
     const openPreview = async (file) => {
       previewFile.value = file
       previewFilePath.value = currentPath.value ? `${currentPath.value}/${file.name}` : file.name
@@ -238,11 +295,12 @@ export default {
       currentOffset.value = 0
       hasMore.value = true
       previewVisible.value = true
-      // 添加 ESC 键监听
+      // 添加 ESC 键监听，支持快捷键关闭
       document.addEventListener('keydown', handleKeydown)
       await loadContent()
     }
 
+    /** 关闭预览窗口 */
     const closePreview = () => {
       previewVisible.value = false
       previewFile.value = null
@@ -251,12 +309,17 @@ export default {
       document.removeEventListener('keydown', handleKeydown)
     }
 
+    /** 键盘事件处理：ESC 关闭预览 */
     const handleKeydown = (e) => {
       if (e.key === 'Escape' && previewVisible.value) {
         closePreview()
       }
     }
 
+    /**
+     * 加载文件内容（分块加载）
+     * 每次加载 CHUNK_SIZE 字节，支持大文件渐进式加载
+     */
     const loadContent = async () => {
       if (!previewFile.value || loadingContent.value) return
       loadingContent.value = true
@@ -276,57 +339,74 @@ export default {
       }
     }
 
+    /** 滚动事件处理：滚动到底部时自动加载更多 */
     const handleScroll = (e) => {
       const el = e.target
+      // 距离底部 50px 时触发加载
       if (el.scrollTop + el.clientHeight >= el.scrollHeight - 50) {
         if (hasMore.value && !loadingContent.value) loadContent()
       }
     }
 
+    // ========== 下载操作方法 ==========
+
+    /** 下载当前预览的文件 */
     const downloadPreviewFile = () => {
       if (!previewFile.value) return
-      window.open(`/deploy/fileBrowser/download?path=${encodeURIComponent(previewFilePath.value)}`, '_blank')
+      downloadSingleFile(previewFilePath.value)
     }
 
-    const downloadSelected = async () => {
+    /**
+     * 下载单个文件（使用隐藏的a标签触发下载）
+     */
+    const downloadSingleFile = (filePath) => {
+      const a = document.createElement('a')
+      a.href = `/deploy/fileBrowser/download?path=${encodeURIComponent(filePath)}`
+      a.download = ''  // 触发下载而非打开
+      a.style.display = 'none'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    }
+
+    /**
+     * 下载选中的文件
+     * 过滤掉目录，逐个下载选中的文件
+     */
+    const downloadSelected = () => {
       if (selectedFiles.value.length === 0) return
       
-      if (selectedFiles.value.length === 1 && !selectedFiles.value[0].isDirectory) {
+      // 过滤掉目录，只下载文件
+      const filesToDownload = selectedFiles.value.filter(f => !f.isDirectory)
+      
+      if (filesToDownload.length === 0) {
+        ElMessage.warning('请选择文件进行下载，目录不支持直接下载')
+        return
+      }
+      
+      // 逐个下载文件，使用延时避免浏览器问题
+      filesToDownload.forEach((file, index) => {
         const filePath = currentPath.value 
-          ? `${currentPath.value}/${selectedFiles.value[0].name}` 
-          : selectedFiles.value[0].name
-        window.open(`/deploy/fileBrowser/download?path=${encodeURIComponent(filePath)}`, '_blank')
-      } else {
-        const paths = selectedFiles.value.map(f => 
-          currentPath.value ? `${currentPath.value}/${f.name}` : f.name
-        )
-        try {
-          const response = await fetch('/deploy/fileBrowser/downloadMultiple', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ paths })
-          })
-          if (response.ok) {
-            const blob = await response.blob()
-            const url = window.URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            a.download = `files_${Date.now()}.zip`
-            a.click()
-            window.URL.revokeObjectURL(url)
-          } else {
-            ElMessage.error('下载失败')
-          }
-        } catch (e) {
-          ElMessage.error('下载失败')
-        }
+          ? `${currentPath.value}/${file.name}` 
+          : file.name
+        setTimeout(() => {
+          downloadSingleFile(filePath)
+        }, index * 500)
+      })
+      
+      // 如果有目录被过滤掉，提示用户
+      const skippedDirs = selectedFiles.value.filter(f => f.isDirectory)
+      if (skippedDirs.length > 0) {
+        ElMessage.info(`已跳过 ${skippedDirs.length} 个目录，目录不支持直接下载`)
       }
     }
+
+    // ========== 生命周期 ==========
 
     onMounted(() => loadDirectory())
 
     onUnmounted(() => {
-      // 清理事件监听
+      // 组件卸载时清理事件监听，防止内存泄漏
       document.removeEventListener('keydown', handleKeydown)
     })
 
@@ -343,6 +423,7 @@ export default {
 </script>
 
 <style scoped>
+/* ========== 页面容器 ========== */
 .page-container {
   padding: 20px;
   height: calc(100vh - 61px);
@@ -364,6 +445,7 @@ export default {
   overflow: hidden;
 }
 
+/* ========== 工具栏 ========== */
 .toolbar {
   display: flex;
   align-items: center;
@@ -398,6 +480,7 @@ export default {
   color: #409eff;
 }
 
+/* ========== 文件列表区域 ========== */
 .file-area {
   flex: 1;
   display: flex;
@@ -438,6 +521,7 @@ export default {
   background-color: #d9ecff;
 }
 
+/* ========== 列样式 ========== */
 .col-checkbox {
   width: 30px;
   flex-shrink: 0;
@@ -458,20 +542,22 @@ export default {
 }
 
 .col-time {
-  width: 160px;
+  width: 200px;
   flex-shrink: 0;
   color: #909399;
   font-size: 13px;
 }
 
 .col-size {
-  width: 80px;
+  width: 120px;
+  padding-right:20px;
   flex-shrink: 0;
   text-align: right;
   color: #909399;
   font-size: 13px;
 }
 
+/* ========== 文件图标 ========== */
 .file-icon {
   font-size: 20px;
   flex-shrink: 0;
@@ -485,6 +571,7 @@ export default {
   color: #909399;
 }
 
+/* ========== 空状态 ========== */
 .empty-state {
   display: flex;
   flex-direction: column;
@@ -498,6 +585,7 @@ export default {
   margin-top: 12px;
 }
 
+/* ========== 状态栏 ========== */
 .status-bar {
   padding: 8px 15px;
   border-top: 1px solid #e4e7ed;
@@ -506,7 +594,7 @@ export default {
   color: #909399;
 }
 
-/* 预览覆盖层 */
+/* ========== 预览覆盖层 ========== */
 .preview-overlay {
   position: fixed;
   top: 0;

@@ -14,8 +14,7 @@ import java.util.List;
 
 /**
  * 版本管理服务
- * <p>
- * 提供版本构建配置的CRUD操作和状态管理。
+ * 提供版本构建配置的CRUD操作和状态管理
  *
  * @author aeye
  * @since 1.0.0
@@ -28,7 +27,6 @@ public class AppBuildService {
 
     /**
      * 服务初始化
-     * <p>
      * 应用启动时重置所有构建状态为就绪，防止异常中断导致的状态不一致
      */
     @PostConstruct
