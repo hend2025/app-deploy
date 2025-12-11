@@ -135,7 +135,7 @@
 </template>
 
 <script>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { Folder, FolderOpened, Document, Refresh, Download, HomeFilled, Back, Close } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
@@ -238,6 +238,8 @@ export default {
       currentOffset.value = 0
       hasMore.value = true
       previewVisible.value = true
+      // 添加 ESC 键监听
+      document.addEventListener('keydown', handleKeydown)
       await loadContent()
     }
 
@@ -245,6 +247,14 @@ export default {
       previewVisible.value = false
       previewFile.value = null
       fileContent.value = ''
+      // 移除 ESC 键监听
+      document.removeEventListener('keydown', handleKeydown)
+    }
+
+    const handleKeydown = (e) => {
+      if (e.key === 'Escape' && previewVisible.value) {
+        closePreview()
+      }
     }
 
     const loadContent = async () => {
@@ -314,6 +324,11 @@ export default {
     }
 
     onMounted(() => loadDirectory())
+
+    onUnmounted(() => {
+      // 清理事件监听
+      document.removeEventListener('keydown', handleKeydown)
+    })
 
     return {
       previewRef, loading, loadingContent, fileList, currentPath, selectedFiles,
