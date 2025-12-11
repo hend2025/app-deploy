@@ -21,6 +21,9 @@
           <el-tag :type="wsConnected ? 'success' : 'danger'" size="small" style="margin-right: 8px;">
             {{ wsConnected ? '已连接' : (reconnecting ? '重连中...' : '未连接') }}
           </el-tag>
+          <el-button :type="paused ? 'success' : 'danger'" size="small" @click="togglePause">
+            {{ paused ? '继续' : '暂停' }}
+          </el-button>
           <el-button type="info" size="small" @click="scrollToBottom">到底部</el-button>
           <el-button type="warning" size="small" @click="clearLogContent">清空</el-button>
           <el-button size="small" @click="closeDialog">关闭</el-button>
@@ -51,8 +54,10 @@ export default {
     const logContent = ref(null)
     const wsConnected = ref(false)
     const reconnecting = ref(false)
+    const paused = ref(false)              // 是否暂停日志刷新
     
     let ws = null
+    let pendingLogs = []                   // 暂停时缓存的日志
     let maxLogSize = 5000 // 默认值，会从后端获取
     let reconnectTimer = null
     let reconnectAttempts = 0
@@ -105,12 +110,21 @@ export default {
       ws.onmessage = (event) => {
         try {
           const log = JSON.parse(event.data)
-          logs.value.push(log)
-          // 超过最大条数时删除最旧的日志
-          while (logs.value.length > maxLogSize) {
-            logs.value.shift()
+          if (paused.value) {
+            // 暂停时缓存日志
+            pendingLogs.push(log)
+            // 限制缓存大小
+            while (pendingLogs.length > maxLogSize) {
+              pendingLogs.shift()
+            }
+          } else {
+            logs.value.push(log)
+            // 超过最大条数时删除最旧的日志
+            while (logs.value.length > maxLogSize) {
+              logs.value.shift()
+            }
+            nextTick(() => scrollToBottom())
           }
-          nextTick(() => scrollToBottom())
         } catch (e) {
           console.error('解析日志失败:', e)
         }
@@ -192,13 +206,35 @@ export default {
       }
     }
 
-    const clearLogContent = () => { logs.value = [] }
+    const clearLogContent = () => { 
+      logs.value = []
+      pendingLogs = []
+    }
+
+    /**
+     * 切换暂停/继续状态
+     */
+    const togglePause = () => {
+      paused.value = !paused.value
+      if (!paused.value && pendingLogs.length > 0) {
+        // 恢复时将缓存的日志追加到显示列表
+        logs.value.push(...pendingLogs)
+        pendingLogs = []
+        // 超过最大条数时删除最旧的日志
+        while (logs.value.length > maxLogSize) {
+          logs.value.shift()
+        }
+        nextTick(() => scrollToBottom())
+      }
+    }
 
     const handleClose = () => { closeWebSocket(); logs.value = [] }
 
     const closeDialog = () => { 
       closeWebSocket()
       logs.value = []
+      pendingLogs = []
+      paused.value = false
       visible.value = false
     }
 
@@ -215,8 +251,8 @@ export default {
     onUnmounted(() => { closeWebSocket() })
 
     return {
-      visible, currentAppCode, logs, logContent, wsConnected, reconnecting,
-      showLog, scrollToBottom, clearLogContent, handleClose, closeDialog, selectAllLogs, escapeHtml
+      visible, currentAppCode, logs, logContent, wsConnected, reconnecting, paused,
+      showLog, scrollToBottom, clearLogContent, handleClose, closeDialog, selectAllLogs, escapeHtml, togglePause
     }
   }
 }

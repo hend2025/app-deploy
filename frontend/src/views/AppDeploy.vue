@@ -70,8 +70,8 @@
         <el-table-column label="操作" width="220" align="center">
           <template #default="{ row }">
             <div class="action-buttons">
-              <el-button type="primary" size="small" :disabled="!!row.pid" @click="startApp(row)">启动</el-button>
-              <el-button type="danger" size="small" :disabled="!row.pid" @click="stopApp(row)">停止</el-button>
+              <el-button type="primary" size="small" :loading="startingApps[row.svcCode]" :disabled="!!row.pid" @click="startApp(row)">启动</el-button>
+              <el-button type="danger" size="small" :loading="stoppingApps[row.svcCode]" :disabled="!row.pid" @click="stopApp(row)">停止</el-button>
               <el-button size="small" @click="viewLogs(row)">日志</el-button>
             </div>
           </template>
@@ -132,8 +132,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button v-if="dialogMode === 'start'" type="success" @click="confirmStart">启动</el-button>
+        <el-button :disabled="startingApps[editForm.svcCode]" @click="editDialogVisible = false">取消</el-button>
+        <el-button v-if="dialogMode === 'start'" type="success" :loading="startingApps[editForm.svcCode]" @click="confirmStart">启动</el-button>
         <el-button v-else type="primary" @click="saveApp">保存</el-button>
       </template>
     </el-dialog>
@@ -169,6 +169,8 @@ export default {
     const editForm = ref({ svcCode: '', appCode: '', version: '', params: '' }) // 编辑表单
     const logModal = ref(null)            // 日志模态框引用
     const selectedRow = ref(null)         // 当前选中的行
+    const startingApps = ref({})          // 正在启动的应用（按钮loading状态）
+    const stoppingApps = ref({})          // 正在停止的应用（按钮loading状态）
 
     // 对话框标题
     const dialogTitle = computed(() => {
@@ -251,17 +253,30 @@ export default {
      * 确认启动应用
      */
     const confirmStart = async () => {
+      const svcCode = editForm.value.svcCode
+      startingApps.value[svcCode] = true
+      
       try {
         await appMgtApi.startApp({
-          svcCode: editForm.value.svcCode,
+          svcCode: svcCode,
           version: editForm.value.version,
           params: editForm.value.params
         })
-        ElMessage.success(`应用启动成功: ${editForm.value.svcCode}`)
+        ElMessage.success(`应用启动成功: ${svcCode}`)
         editDialogVisible.value = false
-        setTimeout(() => searchApps(false), 1000)
+
+        const targetRow = appList.value.find(v => v.svcCode === currentApp.value.svcCode)
+        if (targetRow) {
+          targetRow.status = '2'
+          targetRow.pid = '1'
+        }
+
       } catch (error) {
         ElMessage.error('启动应用失败: ' + error.message)
+      } finally {
+        startingApps.value[svcCode] = false
+        // 延迟刷新列表获取最新状态
+        setTimeout(() => searchApps(false), 5000)
       }
     }
 
@@ -277,16 +292,21 @@ export default {
      * 确认停止应用
      */
     const confirmStop = async () => {
+      const svcCode = currentApp.value.svcCode
+      stoppingApps.value[svcCode] = true
+      stopDialogVisible.value = false  // 立即关闭弹窗
+      
       try {
         await appMgtApi.stopApp({
-          svcCode: currentApp.value.svcCode,
+          svcCode: svcCode,
           pid: currentApp.value.pid
         })
         ElMessage.success('应用已停止')
-        stopDialogVisible.value = false
-        searchApps(false)
       } catch (error) {
         ElMessage.error('停止应用失败: ' + error.message)
+      } finally {
+        stoppingApps.value[svcCode] = false
+        setTimeout(() => searchApps(false), 200)
       }
     }
 
@@ -421,7 +441,7 @@ export default {
 
     return {
       searchText, appList, appBuildList, loading, currentApp,
-      stopDialogVisible, sortedAppList,
+      stopDialogVisible, sortedAppList, startingApps, stoppingApps,
       editDialogVisible, dialogMode, dialogTitle, editForm, selectedRow, handleCurrentChange,
       searchApps, startApp, confirmStart, stopApp, confirmStop,
       viewLogs, getStatusText, formatDateTime, addApp, editApp, saveApp, deleteApp, logModal,

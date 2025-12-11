@@ -71,7 +71,7 @@
           <template #default="{ row }">
             <div class="action-buttons">
               <el-button type="primary" size="small" :disabled="row.status !== '0'" @click="buildApp(row)">构建</el-button>
-              <el-button type="danger" size="small" :disabled="row.status !== '1'" @click="stopApp(row)">停止</el-button>
+              <el-button type="danger" size="small" :loading="stoppingApps[row.appCode]" :disabled="row.status !== '1'" @click="stopApp(row)">停止</el-button>
               <el-button size="small" @click="viewLogs(row)">日志</el-button>
             </div>
           </template>
@@ -90,8 +90,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="buildDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmBuild">确定构建</el-button>
+        <el-button :disabled="buildingApps[currentVersion.appCode]" @click="buildDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="buildingApps[currentVersion.appCode]" @click="confirmBuild">确定构建</el-button>
       </template>
     </el-dialog>
 
@@ -187,6 +187,8 @@ export default {
     })
     const logModal = ref(null)             // 日志模态框引用
     const selectedRow = ref(null)          // 当前选中的行
+    const buildingApps = ref({})           // 正在构建的应用（按钮loading状态）
+    const stoppingApps = ref({})           // 正在停止的应用（按钮loading状态）
 
     /**
      * 表格行选中事件处理
@@ -247,26 +249,32 @@ export default {
         ElMessage.warning('请输入分支名或Tag')
         return
       }
+      const appCode = currentVersion.value.appCode
+      buildingApps.value[appCode] = true
+      
       try {
-
-        const response = await verBuildApi.build({
-          appCode: currentVersion.value.appCode,
+        await verBuildApi.build({
+          appCode: appCode,
           appName: currentVersion.value.appName,
           branchOrTag: buildForm.value.branchOrTag
         })
         ElMessage.success('构建任务已启动')
         buildDialogVisible.value = false
-        
+
         // 立即更新当前行的状态为构建中
         const targetRow = versionList.value.find(v => v.appCode === currentVersion.value.appCode)
         if (targetRow) {
           targetRow.status = '1'  // 构建中
         }
-        
+
         // 延迟刷新列表获取最新状态
-        setTimeout(() => searchVersions(), 3000)
+        setTimeout(() => searchVersions(), 5000)
       } catch (error) {
         ElMessage.error('启动构建失败: ' + error.message)
+      } finally {
+        buildingApps.value[appCode] = false
+        // 刷新列表获取最新状态
+        setTimeout(() => searchVersions(), 200)
       }
     }
 
@@ -280,9 +288,15 @@ export default {
           '停止确认',
           { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
         )
-        await verBuildApi.stop({ appCode: version.appCode })
-        ElMessage.success('停止操作已执行，日志已保存')
-        searchVersions()
+        const appCode = version.appCode
+        stoppingApps.value[appCode] = true
+        try {
+          await verBuildApi.stop({ appCode })
+          ElMessage.success('停止操作已执行，日志已保存')
+        } finally {
+          stoppingApps.value[appCode] = false
+          searchVersions()
+        }
       } catch (error) {
         if (error !== 'cancel') {
           ElMessage.error('停止操作失败: ' + error.message)
@@ -390,7 +404,7 @@ export default {
     return {
       searchTerm, versionList, loading, currentVersion, buildForm,
       buildDialogVisible, sortedVersionList, editDialogVisible, isEdit, editForm,
-      selectedRow, handleCurrentChange,
+      selectedRow, handleCurrentChange, buildingApps, stoppingApps,
       searchVersions, buildApp, confirmBuild, stopApp, viewLogs, formatDateTime, 
       addVersion, editVersion, saveVersion, deleteVersion, logModal
     }
