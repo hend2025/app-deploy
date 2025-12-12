@@ -329,7 +329,7 @@ public class BuildTaskService {
     /**
      * 将前端目录打包为war文件
      * 
-     * 用于Vue前端项目，将指定目录打包为war文件
+     * 用于Vue前端项目，将指定目录打包为war文件，并复制目录到归档目录
      *
      * @param appCode     应用编码
      * @param branchOrTag 分支或Tag名称
@@ -374,6 +374,111 @@ public class BuildTaskService {
             logConsumer.accept("INFO", "war文件打包成功: " + warFile.getAbsolutePath());
         } catch (IOException e) {
             logConsumer.accept("ERROR", "打包war文件失败: " + e.getMessage());
+        }
+        
+        // 复制归档目录到应用归档目录下（不带版本号，如 his-h5）
+        File targetDir = new File(appArchivePath, dirName);
+        logConsumer.accept("INFO", "开始复制目录到归档目录: " + dirName);
+        
+        try {
+            // 如果目标目录已存在，先删除
+            if (targetDir.exists()) {
+                logConsumer.accept("INFO", "目标目录已存在，先删除: " + targetDir.getAbsolutePath());
+                deleteDirectory(targetDir);
+            }
+            
+            copyDirectory(distDir, targetDir, logConsumer);
+            logConsumer.accept("INFO", "目录复制成功: " + targetDir.getAbsolutePath());
+            
+            // Linux系统下授权755
+            if (!isWindows()) {
+                logConsumer.accept("INFO", "Linux系统，开始授权755...");
+                setPermissions(targetDir, logConsumer);
+                logConsumer.accept("INFO", "目录授权完成");
+            }
+        } catch (IOException e) {
+            logConsumer.accept("ERROR", "复制目录失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 递归删除目录
+     *
+     * @param dir 要删除的目录
+     */
+    private void deleteDirectory(File dir) throws IOException {
+        if (dir.isDirectory()) {
+            File[] files = dir.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    deleteDirectory(file);
+                }
+            }
+        }
+        Files.deleteIfExists(dir.toPath());
+    }
+    
+    /**
+     * 递归复制目录
+     *
+     * @param sourceDir   源目录
+     * @param targetDir   目标目录
+     * @param logConsumer 日志回调函数
+     */
+    private void copyDirectory(File sourceDir, File targetDir, 
+                               java.util.function.BiConsumer<String, String> logConsumer) throws IOException {
+        if (!targetDir.exists()) {
+            targetDir.mkdirs();
+        }
+        
+        File[] files = sourceDir.listFiles();
+        if (files == null) return;
+        
+        for (File file : files) {
+            File targetFile = new File(targetDir, file.getName());
+            if (file.isDirectory()) {
+                copyDirectory(file, targetFile, logConsumer);
+            } else {
+                Files.copy(file.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+    }
+    
+    /**
+     * 递归设置目录和文件权限为755
+     * 仅在Linux系统下有效
+     *
+     * @param file        文件或目录
+     * @param logConsumer 日志回调函数
+     */
+    private void setPermissions(File file, java.util.function.BiConsumer<String, String> logConsumer) {
+        try {
+            // 设置755权限：rwxr-xr-x
+            java.nio.file.attribute.PosixFilePermission[] perms = {
+                java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+                java.nio.file.attribute.PosixFilePermission.OWNER_WRITE,
+                java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE,
+                java.nio.file.attribute.PosixFilePermission.GROUP_READ,
+                java.nio.file.attribute.PosixFilePermission.GROUP_EXECUTE,
+                java.nio.file.attribute.PosixFilePermission.OTHERS_READ,
+                java.nio.file.attribute.PosixFilePermission.OTHERS_EXECUTE
+            };
+            Set<java.nio.file.attribute.PosixFilePermission> permSet = new HashSet<>(Arrays.asList(perms));
+            
+            Files.setPosixFilePermissions(file.toPath(), permSet);
+            
+            if (file.isDirectory()) {
+                File[] children = file.listFiles();
+                if (children != null) {
+                    for (File child : children) {
+                        setPermissions(child, logConsumer);
+                    }
+                }
+            }
+        } catch (UnsupportedOperationException e) {
+            // Windows系统不支持POSIX权限，忽略
+        } catch (IOException e) {
+            logConsumer.accept("WARN", "设置权限失败: " + file.getAbsolutePath() + ", 原因: " + e.getMessage());
         }
     }
     
