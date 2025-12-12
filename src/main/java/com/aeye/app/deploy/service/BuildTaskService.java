@@ -260,9 +260,22 @@ public class BuildTaskService {
                         String.format("构建成功，退出码: %d", exitCode), new Date());
                     
                     // 步骤3：归档文件
-                    if (appVersion.getArchiveFiles() != null && !appVersion.getArchiveFiles().trim().isEmpty()) {
-                        logBufferService.addLog(appCode, branchOrTag, "INFO", "===== 步骤3: 归档文件 =====", new Date());
-                        archiveFiles(appCode, branchOrTag, workDir, appVersion.getArchiveFiles(),
+                    logBufferService.addLog(appCode, branchOrTag, "INFO", "===== 步骤3: 归档文件 =====", new Date());
+                    String archiveFilesConfig = appVersion.getArchiveFiles();
+                    boolean hasArchiveConfig = archiveFilesConfig != null && !archiveFilesConfig.trim().isEmpty();
+                    String appType = appVersion.getAppType();
+                    
+                    if ("2".equals(appType)) {
+                        // Vue前端项目：未配置归档文件时默认打包dist/目录为war文件，否则打包指定目录
+                        String distDir = hasArchiveConfig ? archiveFilesConfig.trim() : "dist/";
+                        logBufferService.addLog(appCode, branchOrTag, "INFO", "前端项目，打包目录: " + distDir, new Date());
+                        archiveDistAsWar(appCode, branchOrTag, workDir, distDir,
+                            (level, msg) -> logBufferService.addLog(appCode, branchOrTag, level, msg, new Date()));
+                    } else {
+                        // Java项目：未配置归档文件时默认为target/*，否则为指定文件
+                        String archivePattern = hasArchiveConfig ? archiveFilesConfig : "target/*";
+                        logBufferService.addLog(appCode, branchOrTag, "INFO", "Java项目，归档文件: " + archivePattern, new Date());
+                        archiveFiles(appCode, branchOrTag, workDir, archivePattern,
                             (level, msg) -> logBufferService.addLog(appCode, branchOrTag, level, msg, new Date()));
                     }
                     
@@ -312,6 +325,86 @@ public class BuildTaskService {
         });
     }
 
+
+    /**
+     * 将前端目录打包为war文件
+     * 
+     * 用于Vue前端项目，将指定目录打包为war文件
+     *
+     * @param appCode     应用编码
+     * @param branchOrTag 分支或Tag名称
+     * @param workDir     工作目录
+     * @param distPath    要打包的目录路径（相对于workDir）
+     * @param logConsumer 日志回调函数
+     */
+    private void archiveDistAsWar(String appCode, String branchOrTag, String workDir, String distPath,
+                                   java.util.function.BiConsumer<String, String> logConsumer) {
+        // 处理目录路径，移除末尾的斜杠
+        String cleanPath = distPath.replaceAll("[/\\\\]+$", "");
+        File distDir = new File(workDir, cleanPath);
+        if (!distDir.exists() || !distDir.isDirectory()) {
+            logConsumer.accept("WARN", "未找到目录: " + distDir.getAbsolutePath());
+            return;
+        }
+        
+        // 创建归档目录
+        File appArchivePath = new File(directoryConfig.getArchiveDir(), appCode);
+        if (!appArchivePath.exists()) {
+            appArchivePath.mkdirs();
+        }
+        
+        // 清理分支/tag名称中的特殊字符
+        String safeBranchName = branchOrTag.replaceAll("[/\\\\:*?\"<>|]", "_");
+        
+        // 获取目录名作为war文件名前缀（如 dist, his-h5 等）
+        String dirName = distDir.getName();
+        
+        // 生成war文件名：目录名-版本号.war（如 dist-v2025.94.war）
+        String warFileName = dirName + "-" + safeBranchName + ".war";
+        File warFile = new File(appArchivePath, warFileName);
+        
+        logConsumer.accept("INFO", "开始打包dist目录为war文件: " + warFileName);
+        
+        try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(
+                new java.io.FileOutputStream(warFile), StandardCharsets.UTF_8)) {
+            
+            // 递归添加dist目录下的所有文件到war包
+            addDirectoryToZip(distDir, "", zos, logConsumer);
+            
+            logConsumer.accept("INFO", "war文件打包成功: " + warFile.getAbsolutePath());
+        } catch (IOException e) {
+            logConsumer.accept("ERROR", "打包war文件失败: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 递归将目录添加到zip文件
+     *
+     * @param dir         要添加的目录
+     * @param basePath    zip内的基础路径
+     * @param zos         zip输出流
+     * @param logConsumer 日志回调函数
+     */
+    private void addDirectoryToZip(File dir, String basePath, java.util.zip.ZipOutputStream zos,
+                                    java.util.function.BiConsumer<String, String> logConsumer) throws IOException {
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        
+        for (File file : files) {
+            String entryName = basePath.isEmpty() ? file.getName() : basePath + "/" + file.getName();
+            
+            if (file.isDirectory()) {
+                // 递归处理子目录
+                addDirectoryToZip(file, entryName, zos, logConsumer);
+            } else {
+                // 添加文件到zip
+                java.util.zip.ZipEntry entry = new java.util.zip.ZipEntry(entryName);
+                zos.putNextEntry(entry);
+                Files.copy(file.toPath(), zos);
+                zos.closeEntry();
+            }
+        }
+    }
 
     /**
      * 归档构建产物

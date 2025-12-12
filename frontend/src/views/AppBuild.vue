@@ -397,8 +397,23 @@ export default {
       }
     }
 
+    // 自动刷新定时器
+    let refreshTimer = null
+
     onMounted(() => {
       searchVersions()
+      // 每10秒自动刷新记录
+      refreshTimer = setInterval(() => {
+        searchVersions()
+      }, 10000)
+    })
+
+    onUnmounted(() => {
+      // 清除定时器
+      if (refreshTimer) {
+        clearInterval(refreshTimer)
+        refreshTimer = null
+      }
     })
 
     return {

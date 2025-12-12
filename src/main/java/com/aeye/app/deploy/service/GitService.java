@@ -62,8 +62,11 @@ public class GitService {
         File workDir = new File(directoryConfig.getWorkspaceDir(), appCode);
         
         if (workDir.exists() && new File(workDir, ".git").exists()) {
-            // 已存在仓库，执行fetch和checkout
+            // 已存在仓库，执行更新操作
             logConsumer.accept("INFO", "检测到已有仓库，执行更新操作...");
+            // 先重置本地修改，避免拉取冲突
+            logConsumer.accept("INFO", "重置本地修改...");
+            executeGitCommand(workDir, new String[]{"git", "reset", "--hard", "HEAD"}, logConsumer);
             executeGitCommand(workDir, new String[]{"git", "fetch", "--all", "--tags"}, logConsumer);
             executeGitCommand(workDir, new String[]{"git", "checkout", branchOrTag}, logConsumer);
             

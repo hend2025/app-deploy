@@ -148,7 +148,7 @@
  * 应用部署页面组件
  * 提供微服务配置管理和运行控制功能
  */
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { appMgtApi, verBuildApi } from '../api'
 import LogModal from '../components/LogModal.vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -434,9 +434,24 @@ export default {
       return appNameMap.value.get(appCode) || appCode
     }
 
+    // 自动刷新定时器
+    let refreshTimer = null
+
     onMounted(() => {
       searchApps()
       loadAppBuildList()
+      // 每10秒自动刷新记录
+      refreshTimer = setInterval(() => {
+        searchApps(false)
+      }, 10000)
+    })
+
+    onUnmounted(() => {
+      // 清除定时器
+      if (refreshTimer) {
+        clearInterval(refreshTimer)
+        refreshTimer = null
+      }
     })
 
     return {

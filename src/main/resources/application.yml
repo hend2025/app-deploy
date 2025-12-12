@@ -6,6 +6,9 @@ server:
 spring:
   application:
     name: app-deploy
+  jackson:
+    time-zone: Asia/Shanghai
+    date-format: yyyy-MM-dd HH:mm:ss
   datasource:
     url: jdbc:mysql://127.0.0.1:3306/medicare_test?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai
     username: root
@@ -23,7 +26,7 @@ mybatis-plus:
   mapper-locations: classpath:mapper/*.xml
 
 app:
-  home-directory: D:/home
+  home-directory: /home/medical
   log:
     cache-size: 5000
     flush-size: 500

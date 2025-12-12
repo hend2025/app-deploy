@@ -31,7 +31,7 @@
       </div>
     </template>
     <div ref="logContent" class="log-content" tabindex="0" @keydown.ctrl.a.prevent="selectAllLogs">
-      <div v-for="(log, index) in logs" :key="index" class="log-line" :class="'log-' + (log.logLevel || 'info').toLowerCase()">{{ escapeHtml(log.logContent) }}</div>
+      <div v-for="(log, index) in logs" :key="index" class="log-line" :class="'log-' + (log.logLevel || 'info').toLowerCase()">{{ decodeHtml(log.logContent) }}</div>
       <div v-if="logs.length === 0" class="empty-tip">暂无日志</div>
     </div>
   </el-dialog>
@@ -77,13 +77,14 @@ export default {
     })
 
     /**
-     * HTML转义，防止XSS攻击
+     * HTML实体解码，将 &gt; &lt; 等转换为实际字符
+     * 后端返回的日志可能已经被转义，需要解码显示
      */
-    const escapeHtml = (text) => {
+    const decodeHtml = (text) => {
       if (!text) return ''
       const div = document.createElement('div')
-      div.textContent = text
-      return div.innerHTML
+      div.innerHTML = text
+      return div.textContent || div.innerText || ''
     }
 
     const getWsUrl = (appCode) => {
@@ -252,7 +253,7 @@ export default {
 
     return {
       visible, currentAppCode, logs, logContent, wsConnected, reconnecting, paused,
-      showLog, scrollToBottom, clearLogContent, handleClose, closeDialog, selectAllLogs, escapeHtml, togglePause
+      showLog, scrollToBottom, clearLogContent, handleClose, closeDialog, selectAllLogs, decodeHtml, togglePause
     }
   }
 }

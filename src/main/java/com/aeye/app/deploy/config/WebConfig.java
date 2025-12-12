@@ -30,6 +30,7 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addViewController("/appBuild").setViewName("forward:/index.html");
         registry.addViewController("/appDeploy").setViewName("forward:/index.html");
         registry.addViewController("/logFiles").setViewName("forward:/index.html");
+        registry.addViewController("/fileBrowser").setViewName("forward:/index.html");
     }
 
     @Override
