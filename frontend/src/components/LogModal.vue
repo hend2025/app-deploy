@@ -30,9 +30,15 @@
         </div>
       </div>
     </template>
-    <div ref="logContent" class="log-content" tabindex="0" @keydown.ctrl.a.prevent="selectAllLogs">
-      <div v-for="(log, index) in logs" :key="index" class="log-line" :class="'log-' + (log.logLevel || 'info').toLowerCase()">{{ decodeHtml(log.logContent) }}</div>
-      <div v-if="logs.length === 0" class="empty-tip">暂无日志</div>
+    <div class="log-container">
+      <el-input
+        ref="logContent"
+        v-model="logText"
+        type="textarea"
+        class="log-textarea"
+        readonly
+        resize="none"
+      />
     </div>
   </el-dialog>
 </template>
@@ -42,7 +48,7 @@
  * 日志模态框组件
  * 提供实时日志查看功能，支持 WebSocket 推送和断线重连
  */
-import { ref, onUnmounted, onMounted, nextTick } from 'vue'
+import { ref, onUnmounted, onMounted, nextTick, computed } from 'vue'
 import { logApi } from '../api'
 
 export default {
@@ -86,6 +92,13 @@ export default {
       div.innerHTML = text
       return div.textContent || div.innerText || ''
     }
+
+    const logText = computed(() => {
+      return logs.value.map(log => {
+        // 解码内容，保留基本的日志格式
+        return decodeHtml(log.logContent)
+      }).join('\n')
+    })
 
     const getWsUrl = (appCode) => {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -202,8 +215,15 @@ export default {
     }
 
     const scrollToBottom = () => {
-      if (logContent.value) {
-        nextTick(() => { logContent.value.scrollTop = logContent.value.scrollHeight })
+      if (logContent.value && logContent.value.textarea) {
+        const textarea = logContent.value.textarea
+        textarea.scrollTop = textarea.scrollHeight
+      } else if (logContent.value && logContent.value.$el) {
+        // Fallback if ref is the component itself
+        const textarea = logContent.value.$el.querySelector('textarea')
+        if (textarea) {
+             textarea.scrollTop = textarea.scrollHeight
+        }
       }
     }
 
@@ -239,52 +259,42 @@ export default {
       visible.value = false
     }
 
-    const selectAllLogs = () => {
-      if (logContent.value) {
-        const range = document.createRange()
-        range.selectNodeContents(logContent.value)
-        const selection = window.getSelection()
-        selection.removeAllRanges()
-        selection.addRange(range)
-      }
-    }
+    // Removed selectAllLogs as textarea natively supports Ctrl+A
 
     onUnmounted(() => { closeWebSocket() })
 
     return {
-      visible, currentAppCode, logs, logContent, wsConnected, reconnecting, paused,
-      showLog, scrollToBottom, clearLogContent, handleClose, closeDialog, selectAllLogs, decodeHtml, togglePause
+      visible, currentAppCode, logs, logContent, wsConnected, reconnecting, paused, logText,
+      showLog, scrollToBottom, clearLogContent, handleClose, closeDialog, decodeHtml, togglePause
     }
   }
 }
 </script>
 
-
 <style scoped>
-.log-content {
-  height: calc(100vh - 120px);
-  overflow-y: auto;
+.log-container {
+  height: calc(100vh - 80px);
+  padding: 0;
+  overflow: hidden; /* Textarea handles scroll */
+}
+
+.log-textarea {
+  height: 100%;
+  width: 100%;
+}
+
+:deep(.el-textarea__inner) {
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  resize: none;
   background-color: #fff;
-  padding: 10px;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 13px;
+  line-height: 1.5;
+  padding: 10px;
+  color: #333;
 }
-.log-line {
-  padding: 4px 8px;
-  border-radius: 3px;
-  margin-bottom: 2px;
-  word-break: break-all;
-}
-.log-debug { background: #f4f4f5; }
-.log-debug .log-level { color: #909399; }
-.log-info { background: #f0f9eb; }
-.log-info .log-level { color: #67c23a; }
-.log-warn { background: #fdf6ec; }
-.log-warn .log-level { color: #e6a23c; }
-.log-error { background: #fef0f0; }
-.log-error .log-level { color: #f56c6c; }
 
 .dialog-header { display: flex; justify-content: space-between; align-items: center; width: 100%; }
 .dialog-title { font-size: 18px; font-weight: 600; }
