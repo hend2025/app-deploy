@@ -41,6 +41,9 @@ public class LogFileWriterService implements CommandLineRunner {
     @Autowired
     private DirectoryConfig directoryConfig;
 
+    @Autowired
+    private AppBuildService appBuildService;
+
     /** 单个日志文件最大大小（MB），默认20MB */
     @Value("${app.log.max-file-size-mb:20}")
     private int maxFileSizeMb;
@@ -84,8 +87,8 @@ public class LogFileWriterService implements CommandLineRunner {
     private ExecutorService writerExecutor;
 
     /** 日志时间格式化器（使用ThreadLocal保证线程安全） */
-    private static final ThreadLocal<SimpleDateFormat> logTimeFormat = 
-            ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS"));
+    private static final ThreadLocal<SimpleDateFormat> logTimeFormat = ThreadLocal
+            .withInitial(() -> new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS"));
 
     /**
      * 获取或创建缓冲区
@@ -106,7 +109,7 @@ public class LogFileWriterService implements CommandLineRunner {
         String logsDir = directoryConfig.getLogsDir();
         logger.info("日志文件写入服务启动，日志目录: {}，刷新阈值: {}，刷新间隔: {} 分钟，单文件最大: {}MB",
                 logsDir, flushSize, flushIntervalMinutes, maxFileSizeMb);
-        
+
         startWriterExecutor();
         startFlushScheduler();
     }
@@ -141,7 +144,6 @@ public class LogFileWriterService implements CommandLineRunner {
         }, flushIntervalMinutes, flushIntervalMinutes, TimeUnit.MINUTES);
     }
 
-
     /**
      * 添加日志到缓冲区
      * 日志会被添加到对应应用的缓冲区，当待写入日志数达到阈值时自动触发文件写入
@@ -152,17 +154,17 @@ public class LogFileWriterService implements CommandLineRunner {
      * @param logContent 日志内容
      * @param logTime    日志时间
      */
-    public void addLog(String appCode, String version, String logLevel, 
-                       String logContent, Date logTime) {
+    public void addLog(String appCode, String version, String logLevel,
+            String logContent, Date logTime) {
         LogFileBuffer buffer = getOrCreateBuffer(appCode);
-        
+
         AppLog log = new AppLog();
         log.setAppCode(appCode);
         log.setVersion(version);
         log.setLogLevel(logLevel);
         log.setLogContent(logContent);
         log.setLogTime(logTime != null ? logTime : new Date());
-        
+
         buffer.logs.offerLast(log);
         int pending = buffer.pendingCount.incrementAndGet();
 
@@ -223,14 +225,13 @@ public class LogFileWriterService implements CommandLineRunner {
 
             // 写入文件
             writeLogsToFile(appCode, logsToWrite, buffer);
-            
+
             logger.debug("应用[{}]日志写入完成，已写入 {} 条", appCode, logsToWrite.size());
 
         } finally {
             buffer.writeLock.unlock();
         }
     }
-
 
     /**
      * 从appCode中提取安全的目录名和文件名前缀
@@ -243,22 +244,22 @@ public class LogFileWriterService implements CommandLineRunner {
         if (appCode == null || appCode.isEmpty()) {
             return "unknown";
         }
-        
+
         // 提取文件名部分（处理路径分隔符）
         String name = appCode;
         int lastSlash = Math.max(name.lastIndexOf('/'), name.lastIndexOf('\\'));
         if (lastSlash >= 0) {
             name = name.substring(lastSlash + 1);
         }
-        
+
         // 去掉.log扩展名
         if (name.toLowerCase().endsWith(".log")) {
             name = name.substring(0, name.length() - 4);
         }
-        
+
         // 清理特殊字符
         name = name.replaceAll("[/\\\\:*?\"<>|]", "_");
-        
+
         return name.isEmpty() ? "unknown" : name;
     }
 
@@ -266,15 +267,15 @@ public class LogFileWriterService implements CommandLineRunner {
      * 写入日志到文件
      */
     private void writeLogsToFile(String appCode, List<AppLog> logs,
-                                  LogFileBuffer buffer) {
+            LogFileBuffer buffer) {
         if (logs.isEmpty()) {
             return;
         }
-        
+
         try {
             // 提取安全的应用名称（处理appCode可能是完整路径的情况）
             String safeAppName = extractSafeAppName(appCode);
-            
+
             // 确保目录存在
             Path logDir = Paths.get(directoryConfig.getLogsDir(), safeAppName);
             if (!Files.exists(logDir)) {
@@ -290,10 +291,10 @@ public class LogFileWriterService implements CommandLineRunner {
             String safeVersion = version.replaceAll("[/\\\\:*?\"<>|]", "_");
 
             // 检查是否需要创建新文件（版本变化或文件过大或首次写入）
-            if (buffer.currentFile == null || 
-                !safeVersion.equals(buffer.currentVersion) || 
-                buffer.currentFileSize >= getMaxFileSize()) {
-                
+            if (buffer.currentFile == null ||
+                    !safeVersion.equals(buffer.currentVersion) ||
+                    buffer.currentFileSize >= getMaxFileSize()) {
+
                 // 版本变化时，开始新的运行/打包
                 if (!safeVersion.equals(buffer.currentVersion)) {
                     buffer.currentVersion = safeVersion;
@@ -305,32 +306,46 @@ public class LogFileWriterService implements CommandLineRunner {
                     // 文件过大时递增文件序号
                     buffer.fileSeq++;
                 }
-                
+
                 // 创建新文件: safeAppName_version_x-y.log
-                String fileName = String.format("%s_%s_%d-%d.log", 
+                String fileName = String.format("%s_%s_%d-%d.log",
                         safeAppName, safeVersion, buffer.runCount, buffer.fileSeq);
                 buffer.currentFile = logDir.resolve(fileName).toFile();
                 buffer.currentFileSize = buffer.currentFile.exists() ? buffer.currentFile.length() : 0;
+
+                // 更新数据库中的日志文件路径
+                try {
+                    appBuildService.updateLogFile(appCode, buffer.currentFile.getAbsolutePath());
+                } catch (Exception e) {
+                    logger.error("更新应用[{}]日志文件路径失败", appCode, e);
+                }
             }
 
             // 写入日志
             try (BufferedWriter writer = new BufferedWriter(
-                    new OutputStreamWriter(new FileOutputStream(buffer.currentFile, true), 
-                                           StandardCharsets.UTF_8))) {
+                    new OutputStreamWriter(new FileOutputStream(buffer.currentFile, true),
+                            StandardCharsets.UTF_8))) {
                 for (AppLog log : logs) {
                     String line = log.getLogContent();
                     writer.write(line);
                     writer.newLine();
                     buffer.currentFileSize += line.getBytes(StandardCharsets.UTF_8).length + 1;
-                    
+
                     // 检查是否需要滚动
                     if (buffer.currentFileSize >= getMaxFileSize()) {
                         writer.flush();
                         buffer.fileSeq++;
-                        String fileName = String.format("%s_%s_%d-%d.log", 
+                        String fileName = String.format("%s_%s_%d-%d.log",
                                 safeAppName, buffer.currentVersion, buffer.runCount, buffer.fileSeq);
                         buffer.currentFile = logDir.resolve(fileName).toFile();
                         buffer.currentFileSize = 0;
+
+                        // 更新数据库中的日志文件路径
+                        try {
+                            appBuildService.updateLogFile(appCode, buffer.currentFile.getAbsolutePath());
+                        } catch (Exception e) {
+                            logger.error("更新应用[{}]日志文件路径失败", appCode, e);
+                        }
                         break;
                     }
                 }
@@ -353,10 +368,9 @@ public class LogFileWriterService implements CommandLineRunner {
     private int findMaxRunCount(Path logDir, String appCode, String version) {
         int maxRunCount = 0;
         String prefix = appCode + "_" + version + "_";
-        
-        File[] files = logDir.toFile().listFiles((dir, name) -> 
-            name.startsWith(prefix) && name.endsWith(".log"));
-        
+
+        File[] files = logDir.toFile().listFiles((dir, name) -> name.startsWith(prefix) && name.endsWith(".log"));
+
         if (files != null) {
             for (File file : files) {
                 String name = file.getName();
@@ -391,13 +405,12 @@ public class LogFileWriterService implements CommandLineRunner {
     private int[] findNextRunAndFileSeq(Path logDir, String appCode, String version) {
         int maxRunCount = 0;
         int maxFileSeq = 0;
-        
+
         // 匹配模式: appCode_version_x-y.log
         String prefix = appCode + "_" + version + "_";
-        
-        File[] files = logDir.toFile().listFiles((dir, name) -> 
-            name.startsWith(prefix) && name.endsWith(".log"));
-        
+
+        File[] files = logDir.toFile().listFiles((dir, name) -> name.startsWith(prefix) && name.endsWith(".log"));
+
         if (files != null) {
             for (File file : files) {
                 String name = file.getName();
@@ -411,7 +424,7 @@ public class LogFileWriterService implements CommandLineRunner {
                         if (parts.length == 2) {
                             int runCount = Integer.parseInt(parts[0]);
                             int fileSeq = Integer.parseInt(parts[1]);
-                            
+
                             if (runCount > maxRunCount) {
                                 maxRunCount = runCount;
                                 maxFileSeq = fileSeq;
@@ -425,21 +438,21 @@ public class LogFileWriterService implements CommandLineRunner {
                 }
             }
         }
-        
+
         // 检查最后一个文件是否已满，决定是继续写入还是创建新文件
         if (maxRunCount > 0) {
             String lastFileName = String.format("%s_%s_%d-%d.log", appCode, version, maxRunCount, maxFileSeq);
             File lastFile = logDir.resolve(lastFileName).toFile();
             if (lastFile.exists() && lastFile.length() >= getMaxFileSize()) {
                 // 文件已满，递增文件序号
-                return new int[]{maxRunCount, maxFileSeq + 1};
+                return new int[] { maxRunCount, maxFileSeq + 1 };
             }
             // 文件未满，继续使用
-            return new int[]{maxRunCount, maxFileSeq};
+            return new int[] { maxRunCount, maxFileSeq };
         }
-        
+
         // 没有找到任何文件，从第1次开始
-        return new int[]{1, 1};
+        return new int[] { 1, 1 };
     }
 
     /**
@@ -452,7 +465,6 @@ public class LogFileWriterService implements CommandLineRunner {
         sb.append(log.getLogContent());
         return sb.toString();
     }
-
 
     /**
      * 刷新所有缓冲区到文件
@@ -476,13 +488,13 @@ public class LogFileWriterService implements CommandLineRunner {
         try {
             // 先刷新现有日志
             flushBufferInternal(appCode, buffer);
-            
+
             // 提取安全的应用名称（处理appCode可能是完整路径的情况）
             String safeAppName = extractSafeAppName(appCode);
-            
+
             // 清理版本号
             String safeVersion = version != null ? version.replaceAll("[/\\\\:*?\"<>|]", "_") : "unknown";
-            
+
             // 确保目录存在
             Path logDir = Paths.get(directoryConfig.getLogsDir(), safeAppName);
             try {
@@ -492,7 +504,7 @@ public class LogFileWriterService implements CommandLineRunner {
             } catch (IOException e) {
                 logger.error("创建日志目录失败: {}", logDir, e);
             }
-            
+
             // 查找当前最大运行次数并递增
             int maxRunCount = findMaxRunCount(logDir, safeAppName, safeVersion);
             buffer.runCount = maxRunCount + 1;
@@ -500,7 +512,7 @@ public class LogFileWriterService implements CommandLineRunner {
             buffer.currentVersion = safeVersion;
             buffer.currentFile = null;
             buffer.currentFileSize = 0;
-            
+
             logger.info("开始新的会话: appCode={}, version={}, runCount={}", appCode, version, buffer.runCount);
         } finally {
             buffer.writeLock.unlock();
@@ -533,10 +545,10 @@ public class LogFileWriterService implements CommandLineRunner {
     @PreDestroy
     public void shutdown() {
         logger.info("正在关闭日志文件写入服务...");
-        
+
         // 刷新所有缓冲区
         flushAllToFile();
-        
+
         // 关闭调度器
         if (scheduler != null && !scheduler.isShutdown()) {
             scheduler.shutdown();
@@ -551,7 +563,7 @@ public class LogFileWriterService implements CommandLineRunner {
                 Thread.currentThread().interrupt();
             }
         }
-        
+
         // 关闭写入线程池
         if (writerExecutor != null && !writerExecutor.isShutdown()) {
             writerExecutor.shutdown();
@@ -566,7 +578,7 @@ public class LogFileWriterService implements CommandLineRunner {
                 Thread.currentThread().interrupt();
             }
         }
-        
+
         logger.info("日志文件写入服务已关闭");
     }
 

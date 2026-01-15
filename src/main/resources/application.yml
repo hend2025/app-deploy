@@ -18,7 +18,7 @@ spring:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+#    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
   global-config:
     db-config:
       id-type: input
@@ -27,8 +27,8 @@ mybatis-plus:
 app:
   home-directory: /home/medical
   log:
-    cache-size: 2000
-    flush-size: 500
+    cache-size: 1000
+    flush-size: 200
     flush-interval-minutes: 5
     max-file-size-mb: 20
   # 资源限制配置

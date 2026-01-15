@@ -90,6 +90,13 @@ public class AppBuild {
     private String archiveFiles;
 
     /**
+     * 日志文件路径
+     * <p>
+     * 指定应用日志文件的绝对路径，当内存无日志时从该文件读取
+     */
+    private String logFile;
+
+    /**
      * 最后更新时间
      */
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")

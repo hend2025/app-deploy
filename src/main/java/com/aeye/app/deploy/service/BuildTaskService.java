@@ -234,6 +234,10 @@ public class BuildTaskService {
                             new InputStreamReader(finalProcess.getInputStream(), charset))) {
                         String line;
                         while ((line = reader.readLine()) != null) {
+                            // 如果任务已被移除（已停止），则停止读取日志
+                            if (!cmdMap.containsKey(appCode)) {
+                                break;
+                            }
                             logBufferService.addLog(appCode, branchOrTag, parseLogLevel(line), line, new Date());
                         }
                     } catch (Exception e) {

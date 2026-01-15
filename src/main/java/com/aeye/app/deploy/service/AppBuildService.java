@@ -74,7 +74,18 @@ public class AppBuildService {
         return verInfo;
     }
 
-
+    /**
+     * 更新日志文件路径
+     *
+     * @param appCode 应用编码
+     * @param logFile 日志文件路径
+     */
+    public void updateLogFile(String appCode, String logFile) {
+        LambdaUpdateWrapper<AppBuild> updateWrapper = new LambdaUpdateWrapper<>();
+        updateWrapper.eq(AppBuild::getAppCode, appCode)
+                .set(AppBuild::getLogFile, logFile);
+        appBuildMapper.update(null, updateWrapper);
+    }
 
     /**
      * 根据应用名称搜索版本
