@@ -40,12 +40,12 @@ import java.util.concurrent.TimeUnit;
  */
 @Service
 public class BuildTaskService {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(BuildTaskService.class);
 
     @Autowired
     private AppBuildService appBuildService;
-    
+
     @Autowired
     private LogBufferService logBufferService;
 
@@ -59,12 +59,12 @@ public class BuildTaskService {
     private DirectoryConfig directoryConfig;
 
     private final Map<String, Process> cmdMap = new ConcurrentHashMap<>();
-    
+
     @Value("${app.process.max-concurrent-builds:10}")
     private int maxConcurrentBuilds;
-    
+
     private ExecutorService executorService;
-    
+
     /**
      * 服务初始化
      * 创建构建任务线程池
@@ -104,17 +104,16 @@ public class BuildTaskService {
 
         String extension = isWindows() ? ".cmd" : ".sh";
         File scriptFile = File.createTempFile("build_" + appCode + "_", extension);
-        
+
         if (isWindows()) {
-            // Windows: 在脚本开头添加chcp 65001设置UTF-8编码
-            // 先统一为LF，再转换为CRLF
+            // Windows: 使用系统默认编码（通常是GBK），不强制UTF-8，防止Maven等工具出现乱码
             processedContent = processedContent.replace("\r\n", "\n").replace("\r", "\n");
             processedContent = processedContent.replace("\n", "\r\n");
-            // 添加UTF-8编码设置
-            processedContent = "@echo off\r\nchcp 65001 >nul\r\n" + processedContent;
-            
+            processedContent = "@echo off\r\n" + processedContent;
+
             // 使用UTF-8编码写入
-            try (java.io.OutputStreamWriter writer = new java.io.OutputStreamWriter(new java.io.FileOutputStream(scriptFile), StandardCharsets.UTF_8)) {
+            try (java.io.OutputStreamWriter writer = new java.io.OutputStreamWriter(
+                    new java.io.FileOutputStream(scriptFile), StandardCharsets.UTF_8)) {
                 writer.write(processedContent);
             }
         } else {
@@ -142,7 +141,7 @@ public class BuildTaskService {
      */
     public void startBuild(AppBuild appVersion, String branchOrTag) {
         String appCode = appVersion.getAppCode();
-        
+
         // 检查是否已有构建任务在运行
         if (cmdMap.containsKey(appCode)) {
             Process existingProcess = cmdMap.get(appCode);
@@ -153,7 +152,7 @@ public class BuildTaskService {
                 cmdMap.remove(appCode);
             }
         }
-        
+
         // 检查并发构建任务数
         int activeBuilds = (int) cmdMap.values().stream()
                 .filter(p -> p != null && p.isAlive())
@@ -168,17 +167,17 @@ public class BuildTaskService {
         if (scriptContent == null || scriptContent.trim().isEmpty()) {
             throw new IllegalStateException("未配置构建脚本");
         }
-        
+
         // 立即更新状态为构建中
         appBuildService.updateStatus(appCode, "1", null);
-        
+
         // 开始新的构建会话（清除缓存并递增打包次数）
         logBufferService.startNewSession(appCode, branchOrTag);
-        
+
         // 记录构建开始日志
-        logBufferService.addLog(appCode, branchOrTag, "INFO", 
-            String.format("开始构建任务: %s, 分支/Tag: %s", appCode, branchOrTag), new Date());
-        
+        logBufferService.addLog(appCode, branchOrTag, "INFO",
+                String.format("开始构建任务: %s, 分支/Tag: %s", appCode, branchOrTag), new Date());
+
         executorService.submit(() -> {
             Process process = null;
             File tempScriptFile = null;
@@ -190,13 +189,12 @@ public class BuildTaskService {
                 if (appVersion.getGitUrl() != null && !appVersion.getGitUrl().trim().isEmpty()) {
                     logBufferService.addLog(appCode, branchOrTag, "INFO", "===== 步骤1: 拉取代码 =====", new Date());
                     workDir = gitService.cloneOrPull(
-                        appCode, 
-                        appVersion.getGitUrl(), 
-                        appVersion.getGitAcct(), 
-                        appVersion.getGitPwd(), 
-                        branchOrTag,
-                        (level, msg) -> logBufferService.addLog(appCode, branchOrTag, level, msg, new Date())
-                    );
+                            appCode,
+                            appVersion.getGitUrl(),
+                            appVersion.getGitAcct(),
+                            appVersion.getGitPwd(),
+                            branchOrTag,
+                            (level, msg) -> logBufferService.addLog(appCode, branchOrTag, level, msg, new Date()));
                 } else {
                     workDir = new File(directoryConfig.getWorkspaceDir(), appCode).getAbsolutePath();
                     logBufferService.addLog(appCode, branchOrTag, "WARN", "未配置Git信息，跳过代码拉取", new Date());
@@ -204,7 +202,7 @@ public class BuildTaskService {
 
                 // 步骤2：执行构建脚本
                 logBufferService.addLog(appCode, branchOrTag, "INFO", "===== 步骤2: 执行构建脚本 =====", new Date());
-                
+
                 // 创建临时脚本文件
                 tempScriptFile = createTempScript(appCode, scriptContent, branchOrTag);
                 logger.info("创建临时脚本: {}", tempScriptFile.getAbsolutePath());
@@ -217,20 +215,23 @@ public class BuildTaskService {
                     // 使用登录shell (-l) 以加载 .bash_profile/.bashrc 中的环境变量（如nvm）
                     processBuilder.command("bash", "-l", tempScriptFile.getAbsolutePath(), branchOrTag);
                 }
-                
+
                 // 设置工作目录
                 processBuilder.directory(new File(workDir));
                 processBuilder.redirectErrorStream(true);
 
                 process = processBuilder.start();
                 cmdMap.put(appCode, process);
-                
+
                 // 读取进程输出并写入内存缓冲
                 final Process finalProcess = process;
                 final java.util.concurrent.CountDownLatch outputLatch = new java.util.concurrent.CountDownLatch(1);
                 Thread outputReader = new Thread(() -> {
+                    // Windows使用GBK编码读取，Linux使用UTF-8
+                    java.nio.charset.Charset charset = isWindows() ? java.nio.charset.Charset.forName("GBK")
+                            : StandardCharsets.UTF_8;
                     try (BufferedReader reader = new BufferedReader(
-                            new InputStreamReader(finalProcess.getInputStream(), StandardCharsets.UTF_8))) {
+                            new InputStreamReader(finalProcess.getInputStream(), charset))) {
                         String line;
                         while ((line = reader.readLine()) != null) {
                             logBufferService.addLog(appCode, branchOrTag, parseLogLevel(line), line, new Date());
@@ -245,7 +246,7 @@ public class BuildTaskService {
                 outputReader.start();
 
                 int exitCode = process.waitFor();
-                
+
                 // 等待日志读取线程完成，最多等待5秒
                 try {
                     outputLatch.await(5, TimeUnit.SECONDS);
@@ -256,41 +257,42 @@ public class BuildTaskService {
                 // 更新任务状态
                 if (exitCode == 0) {
                     logger.info("构建成功: {}, 分支/Tag: {}", appCode, branchOrTag);
-                    logBufferService.addLog(appCode, branchOrTag, "INFO", 
-                        String.format("构建成功，退出码: %d", exitCode), new Date());
-                    
+                    logBufferService.addLog(appCode, branchOrTag, "INFO",
+                            String.format("构建成功，退出码: %d", exitCode), new Date());
+
                     // 步骤3：归档文件
                     logBufferService.addLog(appCode, branchOrTag, "INFO", "===== 步骤3: 归档文件 =====", new Date());
                     String archiveFilesConfig = appVersion.getArchiveFiles();
                     boolean hasArchiveConfig = archiveFilesConfig != null && !archiveFilesConfig.trim().isEmpty();
                     String appType = appVersion.getAppType();
-                    
+
                     if ("2".equals(appType)) {
                         // Vue前端项目：未配置归档文件时默认打包dist/目录为war文件，否则打包指定目录
                         String distDir = hasArchiveConfig ? archiveFilesConfig.trim() : "dist/";
                         logBufferService.addLog(appCode, branchOrTag, "INFO", "前端项目，打包目录: " + distDir, new Date());
                         archiveDistAsWar(appCode, branchOrTag, workDir, distDir,
-                            (level, msg) -> logBufferService.addLog(appCode, branchOrTag, level, msg, new Date()));
+                                (level, msg) -> logBufferService.addLog(appCode, branchOrTag, level, msg, new Date()));
                     } else {
                         // Java项目：未配置归档文件时默认为target/*，否则为指定文件
                         String archivePattern = hasArchiveConfig ? archiveFilesConfig : "target/*";
-                        logBufferService.addLog(appCode, branchOrTag, "INFO", "Java项目，归档文件: " + archivePattern, new Date());
+                        logBufferService.addLog(appCode, branchOrTag, "INFO", "Java项目，归档文件: " + archivePattern,
+                                new Date());
                         archiveFiles(appCode, branchOrTag, workDir, archivePattern,
-                            (level, msg) -> logBufferService.addLog(appCode, branchOrTag, level, msg, new Date()));
+                                (level, msg) -> logBufferService.addLog(appCode, branchOrTag, level, msg, new Date()));
                     }
-                    
+
                     appBuildService.updateStatus(appCode, "0", branchOrTag);
                 } else {
                     logger.warn("构建失败: {}, 分支/Tag: {}, 退出码: {}", appCode, branchOrTag, exitCode);
-                    logBufferService.addLog(appCode, branchOrTag, "ERROR", 
-                        String.format("构建失败，退出码: %d", exitCode), new Date());
+                    logBufferService.addLog(appCode, branchOrTag, "ERROR",
+                            String.format("构建失败，退出码: %d", exitCode), new Date());
                     appBuildService.updateStatus(appCode, "0", null);
                 }
 
             } catch (Exception e) {
                 logger.error("构建任务异常: {}, 分支/Tag: {}", appCode, branchOrTag, e);
-                logBufferService.addLog(appCode, branchOrTag, "ERROR", 
-                    "构建任务异常: " + e.getMessage(), new Date());
+                logBufferService.addLog(appCode, branchOrTag, "ERROR",
+                        "构建任务异常: " + e.getMessage(), new Date());
                 try {
                     appBuildService.updateStatus(appCode, "0", null);
                 } catch (Exception ex) {
@@ -325,7 +327,6 @@ public class BuildTaskService {
         });
     }
 
-
     /**
      * 将前端目录打包为war文件
      * 
@@ -338,7 +339,7 @@ public class BuildTaskService {
      * @param logConsumer 日志回调函数
      */
     private void archiveDistAsWar(String appCode, String branchOrTag, String workDir, String distPath,
-                                   java.util.function.BiConsumer<String, String> logConsumer) {
+            java.util.function.BiConsumer<String, String> logConsumer) {
         // 处理目录路径，移除末尾的斜杠
         String cleanPath = distPath.replaceAll("[/\\\\]+$", "");
         File distDir = new File(workDir, cleanPath);
@@ -346,50 +347,50 @@ public class BuildTaskService {
             logConsumer.accept("WARN", "未找到目录: " + distDir.getAbsolutePath());
             return;
         }
-        
+
         // 创建归档目录
         File appArchivePath = new File(directoryConfig.getArchiveDir(), appCode);
         if (!appArchivePath.exists()) {
             appArchivePath.mkdirs();
         }
-        
+
         // 清理分支/tag名称中的特殊字符
         String safeBranchName = branchOrTag.replaceAll("[/\\\\:*?\"<>|]", "_");
-        
+
         // 获取目录名作为war文件名前缀（如 dist, his-h5 等）
         String dirName = distDir.getName();
-        
+
         // 生成war文件名：目录名-版本号.war（如 dist-v2025.94.war）
         String warFileName = dirName + "-" + safeBranchName + ".war";
         File warFile = new File(appArchivePath, warFileName);
-        
+
         logConsumer.accept("INFO", "开始打包dist目录为war文件: " + warFileName);
-        
+
         try (java.util.zip.ZipOutputStream zos = new java.util.zip.ZipOutputStream(
                 new java.io.FileOutputStream(warFile), StandardCharsets.UTF_8)) {
-            
+
             // 递归添加dist目录下的所有文件到war包
             addDirectoryToZip(distDir, "", zos, logConsumer);
-            
+
             logConsumer.accept("INFO", "war文件打包成功: " + warFile.getAbsolutePath());
         } catch (IOException e) {
             logConsumer.accept("ERROR", "打包war文件失败: " + e.getMessage());
         }
-        
+
         // 复制归档目录到应用归档目录下（不带版本号，如 his-h5）
         File targetDir = new File(appArchivePath, dirName);
         logConsumer.accept("INFO", "开始复制目录到归档目录: " + dirName);
-        
+
         try {
             // 如果目标目录已存在，先删除
             if (targetDir.exists()) {
                 logConsumer.accept("INFO", "目标目录已存在，先删除: " + targetDir.getAbsolutePath());
                 deleteDirectory(targetDir);
             }
-            
+
             copyDirectory(distDir, targetDir, logConsumer);
             logConsumer.accept("INFO", "目录复制成功: " + targetDir.getAbsolutePath());
-            
+
             // Linux系统下授权755
             if (!isWindows()) {
                 logConsumer.accept("INFO", "Linux系统，开始授权755...");
@@ -400,7 +401,7 @@ public class BuildTaskService {
             logConsumer.accept("ERROR", "复制目录失败: " + e.getMessage());
         }
     }
-    
+
     /**
      * 递归删除目录
      *
@@ -417,7 +418,7 @@ public class BuildTaskService {
         }
         Files.deleteIfExists(dir.toPath());
     }
-    
+
     /**
      * 递归复制目录
      *
@@ -425,15 +426,16 @@ public class BuildTaskService {
      * @param targetDir   目标目录
      * @param logConsumer 日志回调函数
      */
-    private void copyDirectory(File sourceDir, File targetDir, 
-                               java.util.function.BiConsumer<String, String> logConsumer) throws IOException {
+    private void copyDirectory(File sourceDir, File targetDir,
+            java.util.function.BiConsumer<String, String> logConsumer) throws IOException {
         if (!targetDir.exists()) {
             targetDir.mkdirs();
         }
-        
+
         File[] files = sourceDir.listFiles();
-        if (files == null) return;
-        
+        if (files == null)
+            return;
+
         for (File file : files) {
             File targetFile = new File(targetDir, file.getName());
             if (file.isDirectory()) {
@@ -443,7 +445,7 @@ public class BuildTaskService {
             }
         }
     }
-    
+
     /**
      * 递归设置目录和文件权限为755
      * 仅在Linux系统下有效
@@ -455,18 +457,18 @@ public class BuildTaskService {
         try {
             // 设置755权限：rwxr-xr-x
             java.nio.file.attribute.PosixFilePermission[] perms = {
-                java.nio.file.attribute.PosixFilePermission.OWNER_READ,
-                java.nio.file.attribute.PosixFilePermission.OWNER_WRITE,
-                java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE,
-                java.nio.file.attribute.PosixFilePermission.GROUP_READ,
-                java.nio.file.attribute.PosixFilePermission.GROUP_EXECUTE,
-                java.nio.file.attribute.PosixFilePermission.OTHERS_READ,
-                java.nio.file.attribute.PosixFilePermission.OTHERS_EXECUTE
+                    java.nio.file.attribute.PosixFilePermission.OWNER_READ,
+                    java.nio.file.attribute.PosixFilePermission.OWNER_WRITE,
+                    java.nio.file.attribute.PosixFilePermission.OWNER_EXECUTE,
+                    java.nio.file.attribute.PosixFilePermission.GROUP_READ,
+                    java.nio.file.attribute.PosixFilePermission.GROUP_EXECUTE,
+                    java.nio.file.attribute.PosixFilePermission.OTHERS_READ,
+                    java.nio.file.attribute.PosixFilePermission.OTHERS_EXECUTE
             };
             Set<java.nio.file.attribute.PosixFilePermission> permSet = new HashSet<>(Arrays.asList(perms));
-            
+
             Files.setPosixFilePermissions(file.toPath(), permSet);
-            
+
             if (file.isDirectory()) {
                 File[] children = file.listFiles();
                 if (children != null) {
@@ -481,7 +483,7 @@ public class BuildTaskService {
             logConsumer.accept("WARN", "设置权限失败: " + file.getAbsolutePath() + ", 原因: " + e.getMessage());
         }
     }
-    
+
     /**
      * 递归将目录添加到zip文件
      *
@@ -491,13 +493,14 @@ public class BuildTaskService {
      * @param logConsumer 日志回调函数
      */
     private void addDirectoryToZip(File dir, String basePath, java.util.zip.ZipOutputStream zos,
-                                    java.util.function.BiConsumer<String, String> logConsumer) throws IOException {
+            java.util.function.BiConsumer<String, String> logConsumer) throws IOException {
         File[] files = dir.listFiles();
-        if (files == null) return;
-        
+        if (files == null)
+            return;
+
         for (File file : files) {
             String entryName = basePath.isEmpty() ? file.getName() : basePath + "/" + file.getName();
-            
+
             if (file.isDirectory()) {
                 // 递归处理子目录
                 addDirectoryToZip(file, entryName, zos, logConsumer);
@@ -517,40 +520,43 @@ public class BuildTaskService {
      * 支持glob模式匹配文件，将匹配的文件复制到归档目录
      * 归档目录结构：archiveDir/appCode/文件名
      *
-     * @param appCode     应用编码
-     * @param branchOrTag 分支或Tag名称（用于文件名替换）
-     * @param workDir     工作目录
+     * @param appCode      应用编码
+     * @param branchOrTag  分支或Tag名称（用于文件名替换）
+     * @param workDir      工作目录
      * @param archiveFiles 归档文件配置（逗号分隔，支持glob模式）
-     * @param logConsumer 日志回调函数
+     * @param logConsumer  日志回调函数
      */
     private void archiveFiles(String appCode, String branchOrTag, String workDir, String archiveFiles,
-                              java.util.function.BiConsumer<String, String> logConsumer) {
+            java.util.function.BiConsumer<String, String> logConsumer) {
         // 创建归档目录：archiveDir/appCode/
         File appArchivePath = new File(directoryConfig.getArchiveDir(), appCode);
         if (!appArchivePath.exists()) {
             appArchivePath.mkdirs();
         }
-        
+
         // 清理分支/tag名称中的特殊字符
         String safeBranchName = branchOrTag.replaceAll("[/\\\\:*?\"<>|]", "_");
-        
+
         String[] patterns = archiveFiles.split(",");
         for (String pattern : patterns) {
             pattern = pattern.trim();
-            if (pattern.isEmpty()) continue;
-            
+            if (pattern.isEmpty())
+                continue;
+
             // 检查是否为glob模式
             if (pattern.contains("*") || pattern.contains("?")) {
                 // 使用glob模式匹配文件
                 try {
                     Path workPath = java.nio.file.Paths.get(workDir);
                     String globPattern = "glob:" + pattern;
-                    java.nio.file.PathMatcher matcher = java.nio.file.FileSystems.getDefault().getPathMatcher(globPattern);
-                    
+                    java.nio.file.PathMatcher matcher = java.nio.file.FileSystems.getDefault()
+                            .getPathMatcher(globPattern);
+
                     List<Path> matchedFiles = new ArrayList<>();
                     Files.walkFileTree(workPath, new java.nio.file.SimpleFileVisitor<Path>() {
                         @Override
-                        public java.nio.file.FileVisitResult visitFile(Path file, java.nio.file.attribute.BasicFileAttributes attrs) {
+                        public java.nio.file.FileVisitResult visitFile(Path file,
+                                java.nio.file.attribute.BasicFileAttributes attrs) {
                             Path relativePath = workPath.relativize(file);
                             if (matcher.matches(relativePath)) {
                                 matchedFiles.add(file);
@@ -558,12 +564,12 @@ public class BuildTaskService {
                             return java.nio.file.FileVisitResult.CONTINUE;
                         }
                     });
-                    
+
                     if (matchedFiles.isEmpty()) {
                         logConsumer.accept("WARN", "未找到匹配的文件: " + pattern);
                         continue;
                     }
-                    
+
                     for (Path matchedFile : matchedFiles) {
                         archiveSingleFile(matchedFile.toFile(), appArchivePath, safeBranchName, logConsumer);
                     }
@@ -581,7 +587,7 @@ public class BuildTaskService {
             }
         }
     }
-    
+
     /**
      * 归档单个文件
      * 
@@ -594,12 +600,12 @@ public class BuildTaskService {
      * @param logConsumer 日志回调函数
      */
     private void archiveSingleFile(File sourceFile, File archivePath, String branchOrTag,
-                                   java.util.function.BiConsumer<String, String> logConsumer) {
+            java.util.function.BiConsumer<String, String> logConsumer) {
         String originalName = sourceFile.getName();
         String targetName = replaceVersionWithBranch(originalName, branchOrTag);
-        
+
         File targetFile = new File(archivePath, targetName);
-        
+
         try {
             Files.copy(sourceFile.toPath(), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
             logConsumer.accept("INFO", "归档成功: " + sourceFile.getName() + " -> " + targetFile.getAbsolutePath());
@@ -607,7 +613,7 @@ public class BuildTaskService {
             logConsumer.accept("ERROR", "归档失败: " + sourceFile.getName() + ", 原因: " + e.getMessage());
         }
     }
-    
+
     /**
      * 替换文件名中的版本号
      * 
@@ -626,14 +632,14 @@ public class BuildTaskService {
             extension = fileName.substring(lastDotIndex);
             baseName = fileName.substring(0, lastDotIndex);
         }
-        
+
         // 匹配版本号模式：数字.数字.数字 开头，后面可能跟其他内容
         // 例如：2.0.9-SNAPSHOT, 1.0.0, 1.0.0.1-SNAPSHOT
         String versionPattern = "\\d+\\.\\d+\\.\\d+.*";
-        
+
         java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(versionPattern);
         java.util.regex.Matcher matcher = pattern.matcher(baseName);
-        
+
         if (matcher.find()) {
             // 获取版本号之前的部分（保留前缀）
             String prefix = baseName.substring(0, matcher.start());
@@ -643,11 +649,11 @@ public class BuildTaskService {
             }
             return prefix + "-" + branchOrTag + extension;
         }
-        
+
         // 如果没有匹配到版本号，在扩展名前添加分支名
         return baseName + "-" + branchOrTag + extension;
     }
-    
+
     /**
      * 解析日志级别
      * 根据日志内容中的关键字判断日志级别
@@ -669,7 +675,6 @@ public class BuildTaskService {
         }
         return "INFO";
     }
-
 
     /**
      * 停止构建任务

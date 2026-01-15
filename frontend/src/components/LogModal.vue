@@ -18,6 +18,20 @@
       <div class="dialog-header">
         <span class="dialog-title">日志详情 - {{ currentAppCode }}</span>
         <div class="dialog-actions">
+          <span class="label">显示条数:</span>
+          <el-select 
+            v-model="maxLogSize" 
+            size="small" 
+            style="width: 100px; margin-right: 8px;" 
+            @change="handleLimitChange"
+          >
+            <el-option
+              v-for="item in [100, 200, 500, 1000, 2000, 3000, 5000, 10000]"
+              :key="item"
+              :label="item"
+              :value="item"
+            />
+          </el-select>
           <el-tag :type="wsConnected ? 'success' : 'danger'" size="small" style="margin-right: 8px;">
             {{ wsConnected ? '已连接' : (reconnecting ? '重连中...' : '未连接') }}
           </el-tag>
@@ -61,10 +75,10 @@ export default {
     const wsConnected = ref(false)
     const reconnecting = ref(false)
     const paused = ref(false)              // 是否暂停日志刷新
+    const maxLogSize = ref(2000)           // 最大显示条数
     
     let ws = null
     let pendingLogs = []                   // 暂停时缓存的日志
-    let maxLogSize = 5000 // 默认值，会从后端获取
     let reconnectTimer = null
     let reconnectAttempts = 0
     const MAX_RECONNECT_ATTEMPTS = 5
@@ -75,29 +89,39 @@ export default {
       try {
         const config = await logApi.getConfig()
         if (config && config.cacheSize) {
-          maxLogSize = config.cacheSize
+          maxLogSize.value = config.cacheSize
         }
       } catch (e) {
         console.warn('获取日志配置失败，使用默认值:', e)
       }
     })
+    
+    /**
+     * 处理显示条数变化
+     */
+    const handleLimitChange = () => {
+      if (logs.value.length > maxLogSize.value) {
+        // 如果当前日志过多，裁剪掉旧日志
+        const deleteCount = logs.value.length - maxLogSize.value
+        logs.value.splice(0, deleteCount)
+      }
+    }
 
     /**
      * HTML实体解码，将 &gt; &lt; 等转换为实际字符
      * 后端返回的日志可能已经被转义，需要解码显示
      */
+    // 复用DOM元素进行解码，避免重复创建
+    const decodeDiv = document.createElement('div')
     const decodeHtml = (text) => {
       if (!text) return ''
-      const div = document.createElement('div')
-      div.innerHTML = text
-      return div.textContent || div.innerText || ''
+      decodeDiv.innerHTML = text
+      return decodeDiv.textContent || decodeDiv.innerText || ''
     }
 
     const logText = computed(() => {
-      return logs.value.map(log => {
-        // 解码内容，保留基本的日志格式
-        return decodeHtml(log.logContent)
-      }).join('\n')
+      // 直接使用已解码的字段，避免每次计算都执行DOM操作
+      return logs.value.map(log => log.decodedContent || log.logContent).join('\n')
     })
 
     const getWsUrl = (appCode) => {
@@ -123,20 +147,39 @@ export default {
       
       ws.onmessage = (event) => {
         try {
-          const log = JSON.parse(event.data)
+          const data = JSON.parse(event.data)
+          let newLogs = []
+          
+          if (Array.isArray(data)) {
+            newLogs = data
+          } else {
+            newLogs = [data]
+          }
+          
+          // 预处理：在接收时一次性解码，避免在computed中重复计算
+          newLogs.forEach(log => {
+             log.decodedContent = decodeHtml(log.logContent)
+          })
+          
           if (paused.value) {
             // 暂停时缓存日志
-            pendingLogs.push(log)
+            pendingLogs.push(...newLogs)
             // 限制缓存大小
-            while (pendingLogs.length > maxLogSize) {
+            while (pendingLogs.length > maxLogSize.value) {
               pendingLogs.shift()
             }
           } else {
-            logs.value.push(log)
+             // 批量添加日志，减少响应式触发次数
+            logs.value.push(...newLogs)
+            
             // 超过最大条数时删除最旧的日志
-            while (logs.value.length > maxLogSize) {
-              logs.value.shift()
+            if (logs.value.length > maxLogSize.value) {
+               // 一次性裁剪，避免循环中频繁操作数组
+               const deleteCount = logs.value.length - maxLogSize.value
+               logs.value.splice(0, deleteCount)
             }
+            
+            // 使用 nextTick 优化滚动
             nextTick(() => scrollToBottom())
           }
         } catch (e) {
@@ -193,7 +236,7 @@ export default {
 
     const fetchHistoryLogs = async () => {
       try {
-        const response = await logApi.incremental(currentAppCode.value, 0, 5000)
+        const response = await logApi.incremental(currentAppCode.value, 0, 2000)
         const historyLogs = response.logs || []
         if (historyLogs.length > 0) {
           logs.value = historyLogs
@@ -265,7 +308,8 @@ export default {
 
     return {
       visible, currentAppCode, logs, logContent, wsConnected, reconnecting, paused, logText,
-      showLog, scrollToBottom, clearLogContent, handleClose, closeDialog, decodeHtml, togglePause
+      showLog, scrollToBottom, clearLogContent, handleClose, closeDialog, decodeHtml, togglePause,
+      maxLogSize, handleLimitChange
     }
   }
 }

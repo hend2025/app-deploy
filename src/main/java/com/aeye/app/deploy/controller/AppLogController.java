@@ -26,7 +26,7 @@ public class AppLogController {
     private AppLogService appLogService;
 
     /** 每应用日志缓存大小 */
-    @Value("${app.log.cache-size:5000}")
+    @Value("${app.log.cache-size:2000}")
     private int cacheSize;
 
     /**

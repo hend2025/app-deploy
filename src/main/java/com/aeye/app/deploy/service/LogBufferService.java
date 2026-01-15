@@ -36,7 +36,7 @@ public class LogBufferService implements CommandLineRunner {
     @Autowired
     private LogWebSocketHandler logWebSocketHandler;
 
-    @Value("${app.log.cache-size:5000}")
+    @Value("${app.log.cache-size:2000}")
     private int maxBufferSizePerApp;
 
     /**

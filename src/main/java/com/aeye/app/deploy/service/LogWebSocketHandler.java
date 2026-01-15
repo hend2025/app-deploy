@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 /**
  * 日志WebSocket处理器
@@ -46,13 +47,14 @@ public class LogWebSocketHandler extends TextWebSocketHandler {
     private final java.util.concurrent.atomic.AtomicInteger connectionCount = new java.util.concurrent.atomic.AtomicInteger(0);
     
     /** 内部消息封装类 */
+    /** 内部消息封装类 */
     private static class LogMessage {
         final String appCode;
-        final String message;
+        final AppLog log;
         
-        LogMessage(String appCode, String message) {
+        LogMessage(String appCode, AppLog log) {
             this.appCode = appCode;
-            this.message = message;
+            this.log = log;
         }
     }
     
@@ -95,18 +97,51 @@ public class LogWebSocketHandler extends TextWebSocketHandler {
     /**
      * 处理发送队列
      */
+    /**
+     * 处理发送队列（批量发送）
+     */
     private void processSendQueue() {
+        List<LogMessage> batchBuffer = new ArrayList<>(500);
+        
         while (!Thread.currentThread().isInterrupted()) {
             try {
-                LogMessage logMessage = messageQueue.poll(1, TimeUnit.SECONDS);
-                if (logMessage != null) {
-                    doSendMessage(logMessage.appCode, logMessage.message);
+                // 阻塞等待第一条消息
+                LogMessage first = messageQueue.poll(1, TimeUnit.SECONDS);
+                if (first == null) {
+                    continue;
                 }
+                
+                batchBuffer.add(first);
+                // 立即获取队列中剩余的消息（最多500条），不阻塞
+                messageQueue.drainTo(batchBuffer, 499);
+                
+                // 按AppCode分组
+                Map<String, List<AppLog>> logGroups = batchBuffer.stream()
+                    .collect(Collectors.groupingBy(
+                        msg -> msg.appCode,
+                        Collectors.mapping(msg -> msg.log, Collectors.toList())
+                    ));
+                
+                // 发送各组消息
+                for (Map.Entry<String, List<AppLog>> entry : logGroups.entrySet()) {
+                    try {
+                        // 序列化为JSON数组发送
+                        String message = objectMapper.writeValueAsString(entry.getValue());
+                        doSendMessage(entry.getKey(), message);
+                    } catch (Exception e) {
+                        logger.error("序列化日志批次失败", e);
+                    }
+                }
+                
+                batchBuffer.clear();
+                
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
             } catch (Exception e) {
                 logger.error("处理WebSocket消息队列异常", e);
+                // 避免异常循环过快
+                try { Thread.sleep(100); } catch (InterruptedException ex) {}
             }
         }
     }
@@ -195,13 +230,12 @@ public class LogWebSocketHandler extends TextWebSocketHandler {
         }
 
         try {
-            String message = objectMapper.writeValueAsString(log);
-            // 放入队列异步发送，避免阻塞日志写入
-            if (!messageQueue.offer(new LogMessage(appCode, message))) {
+            // 放入队列异步发送（不再预先序列化，改为批量处理时序列化）
+            if (!messageQueue.offer(new LogMessage(appCode, log))) {
                 logger.warn("WebSocket消息队列已满，丢弃消息: appCode={}", appCode);
             }
         } catch (Exception e) {
-            logger.error("序列化日志失败", e);
+            logger.error("入队日志失败", e);
         }
     }
 
