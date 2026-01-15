@@ -58,4 +58,18 @@ public class AppDeployService {
         appDeployMapper.deleteById(svcCode);
     }
 
+    /**
+     * 更新日志文件路径
+     *
+     * @param svcCode 微服务编码
+     * @param logFile 日志文件绝对路径
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void updateLogFile(String svcCode, String logFile) {
+        com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<AppDeploy> wrapper = new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<>();
+        wrapper.eq(AppDeploy::getSvcCode, svcCode)
+                .set(AppDeploy::getLogFile, logFile);
+        appDeployMapper.update(null, wrapper);
+    }
+
 }

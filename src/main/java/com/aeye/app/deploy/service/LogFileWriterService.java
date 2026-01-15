@@ -44,6 +44,9 @@ public class LogFileWriterService implements CommandLineRunner {
     @Autowired
     private AppBuildService appBuildService;
 
+    @Autowired
+    private AppDeployService appDeployService;
+
     /** 单个日志文件最大大小（MB），默认20MB */
     @Value("${app.log.max-file-size-mb:20}")
     private int maxFileSizeMb;
@@ -315,7 +318,10 @@ public class LogFileWriterService implements CommandLineRunner {
 
                 // 更新数据库中的日志文件路径
                 try {
-                    appBuildService.updateLogFile(appCode, buffer.currentFile.getAbsolutePath());
+                    String absolutePath = buffer.currentFile.getAbsolutePath();
+                    appBuildService.updateLogFile(appCode, absolutePath);
+                    // 同时也更新AppDeploy表（如果存在对应的svcCode）
+                    appDeployService.updateLogFile(appCode, absolutePath);
                 } catch (Exception e) {
                     logger.error("更新应用[{}]日志文件路径失败", appCode, e);
                 }
@@ -342,7 +348,10 @@ public class LogFileWriterService implements CommandLineRunner {
 
                         // 更新数据库中的日志文件路径
                         try {
-                            appBuildService.updateLogFile(appCode, buffer.currentFile.getAbsolutePath());
+                            String absolutePath = buffer.currentFile.getAbsolutePath();
+                            appBuildService.updateLogFile(appCode, absolutePath);
+                            // 同时也更新AppDeploy表（如果存在对应的svcCode）
+                            appDeployService.updateLogFile(appCode, absolutePath);
                         } catch (Exception e) {
                             logger.error("更新应用[{}]日志文件路径失败", appCode, e);
                         }

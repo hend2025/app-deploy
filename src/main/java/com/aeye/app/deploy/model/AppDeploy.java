@@ -24,4 +24,7 @@ public class AppDeploy {
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private Date updateTime;
 
+    /** 日志文件路径 */
+    private String logFile;
+
 }
